@@ -1,0 +1,26 @@
+name: validate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      - name: Validate package (ACC-1)
+        run: go run ./scripts/validate_package.go
+
+      - name: Test (ACC-2)
+        run: go test ./...
+
+      - name: Vet (ACC-3)
+        run: go vet ./...

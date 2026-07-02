@@ -1,0 +1,7 @@
+# OS / editor cruft
+*.swp
+.DS_Store
+
+# Machine-local Claude Code settings — never commit (the rest of .claude/,
+# the shipped agent specs + dispatcher skill, IS the package payload).
+.claude/settings.local.json
