@@ -3,7 +3,7 @@ name: forensic-analyst
 description: >-
   Use this agent for deep root-cause investigation of hard bugs: intermittent
   failures, race conditions, cross-system issues, flaky tests, or anything
-  where the cause isn't apparent from a quick look. It reasons at maximum
+  where the cause isn't apparent from a quick look. It reasons at very high
   depth and returns a forensic report, not a fix. Prefer helper-worker for
   quick fact-finding, and route the confirmed root cause to coding-worker or
   fast-coding-worker once this agent has identified it.

@@ -34,7 +34,7 @@ description: >-
   use case.
   </commentary>
   </example>
-model: opus
+model: sonnet
 effort: high
 color: orange
 tools: Read, Grep, Glob, Bash, WebFetch, WebSearch, Edit, Write, NotebookEdit

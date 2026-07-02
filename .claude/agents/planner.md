@@ -33,8 +33,8 @@ description: >-
   jumping straight to an executor risks missing ordering constraints.
   </commentary>
   </example>
-model: opus
-effort: high
+model: fable
+effort: xhigh
 color: blue
 tools: Read, Grep, Glob, Bash, WebFetch, WebSearch
 ---

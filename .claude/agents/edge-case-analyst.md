@@ -34,8 +34,8 @@ description: >-
   change, still fits edge-case-analyst.
   </commentary>
   </example>
-model: fable
-effort: xhigh
+model: opus
+effort: high
 color: magenta
 tools: Read, Grep, Glob, Bash, WebFetch, WebSearch
 ---

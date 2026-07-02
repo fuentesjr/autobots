@@ -52,18 +52,18 @@ This document is the **normative, buildable contract** for the Autobots package.
 
 | Role | Access | `model` alias | `effort` | Underlying model |
 |---|---|---|---|---|
-| `planner` | read-only | `opus` | `high` | Opus 4.8 (`claude-opus-4-8`) |
-| `coding-worker` | writable | `sonnet` | `medium` | Sonnet 5 (`claude-sonnet-5`) |
+| `planner` | read-only | `fable` | `xhigh` | Fable 5 (`claude-fable-5`) |
+| `coding-worker` | writable | `sonnet` | `high` | Sonnet 5 (`claude-sonnet-5`) |
 | `fast-coding-worker` | writable | `haiku` | *(omitted)* | Haiku 4.5 (`claude-haiku-4-5`) |
 | `helper-worker` | read-only | `haiku` | *(omitted)* | Haiku 4.5 (`claude-haiku-4-5`) |
 | `forensic-analyst` | read-only | `fable` | `xhigh` | Fable 5 (`claude-fable-5`) |
-| `doc-reviewer` | read-only | `haiku` | *(omitted)* | Haiku 4.5 (`claude-haiku-4-5`) |
+| `doc-reviewer` | read-only | `sonnet` | `medium` | Sonnet 5 (`claude-sonnet-5`) |
 | `reviewer` | read-only | `opus` | `high` | Opus 4.8 (`claude-opus-4-8`) |
-| `qa-engineer` | writable | `opus` | `high` | Opus 4.8 (`claude-opus-4-8`) |
-| `edge-case-analyst` | read-only | `fable` | `xhigh` | Fable 5 (`claude-fable-5`) |
+| `qa-engineer` | writable | `sonnet` | `high` | Sonnet 5 (`claude-sonnet-5`) |
+| `edge-case-analyst` | read-only | `opus` | `high` | Opus 4.8 (`claude-opus-4-8`) |
 | `advisor` | read-only | `fable` | `xhigh` | Fable 5 (`claude-fable-5`) |
 
-`AGT-2` Model distribution MUST be **3 Fable** (`forensic-analyst`, `edge-case-analyst`, `advisor`) · **3 Opus** (`planner`, `reviewer`, `qa-engineer`) · **1 Sonnet** (`coding-worker`) · **3 Haiku** (`fast-coding-worker`, `helper-worker`, `doc-reviewer`).
+`AGT-2` Model distribution MUST be **3 Fable** (`planner`, `forensic-analyst`, `advisor`) · **2 Opus** (`reviewer`, `edge-case-analyst`) · **3 Sonnet** (`coding-worker`, `doc-reviewer`, `qa-engineer`) · **2 Haiku** (`fast-coding-worker`, `helper-worker`).
 
 `AGT-3` Exactly three roles MUST be writable: `coding-worker`, `fast-coding-worker`, `qa-engineer`. All other seven roles MUST be read-only.
 
@@ -80,7 +80,7 @@ This document is the **normative, buildable contract** for the Autobots package.
 | `name` | MUST be present, `kebab-case`, and equal to the filename without `.md`. MUST be unique across the roster. |
 | `description` | MUST be present and non-blank. MUST describe when to route to the role and SHOULD include one or more `<example>` trigger blocks that drive automatic delegation. |
 | `model` | MUST be present and MUST be one of `fable`, `opus`, `sonnet`, `haiku`, matching §3 for the role. |
-| `effort` | MUST be present on every Fable/Opus/Sonnet role with the value in §3. MUST be omitted on every Haiku role (`fast-coding-worker`, `helper-worker`, `doc-reviewer`). |
+| `effort` | MUST be present on every Fable/Opus/Sonnet role with the value in §3. MUST be omitted on every Haiku role (`fast-coding-worker`, `helper-worker`). |
 | `tools` | MUST be present and MUST be exactly the access-class list in §4.2. MUST NOT contain `Agent`. MUST NOT contain any todo tool (`TaskCreate`, `TaskGet`, `TaskUpdate`, `TaskList`). |
 | `color` | MAY be present (optional UI color). |
 

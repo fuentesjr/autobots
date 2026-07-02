@@ -33,7 +33,7 @@ description: >-
   </commentary>
   </example>
 model: sonnet
-effort: medium
+effort: high
 color: cyan
 tools: Read, Grep, Glob, Bash, WebFetch, WebSearch, Edit, Write, NotebookEdit
 ---

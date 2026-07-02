@@ -31,7 +31,8 @@ description: >-
   exactly the doc-reviewer role.
   </commentary>
   </example>
-model: haiku
+model: sonnet
+effort: medium
 color: teal
 tools: Read, Grep, Glob, Bash, WebFetch, WebSearch
 ---
