@@ -17,7 +17,7 @@ This document is the **normative, buildable contract** for the Autobots package.
 
 | Artifact | Repo-local path | Global path (`--global`) | Required content |
 |---|---|---|---|
-| Dispatcher skill | `.claude/skills/autobots/SKILL.md` | `~/.claude/skills/autobots/SKILL.md` | §5 |
+| Dispatcher skill | `.claude/skills/autobots/SKILL.md` | `~/.claude/skills/autobots/SKILL.md` | §6–§8 |
 | `planner` agent | `.claude/agents/planner.md` | `~/.claude/agents/planner.md` | §4 |
 | `coding-worker` agent | `.claude/agents/coding-worker.md` | `~/.claude/agents/coding-worker.md` | §4 |
 | `fast-coding-worker` agent | `.claude/agents/fast-coding-worker.md` | `~/.claude/agents/fast-coding-worker.md` | §4 |
@@ -33,15 +33,16 @@ This document is the **normative, buildable contract** for the Autobots package.
 
 | File | Purpose | Referenced by |
 |---|---|---|
-| `scripts/install.sh` | Installer (§8) | `INS-*` |
-| `scripts/validate_package.go` | Validator (§7) | `VAL-*` |
-| `docs/design.md` | Rationale document | `VAL-*` |
-| `docs/spec.md` | This document | — |
-| `docs/faq.md` | User FAQ | `VAL-6` |
-| `README.md` | Overview + model mapping + `CLAUDE_CODE_SUBAGENT_MODEL` caveat | `VAL-6`, `VAL-7`, `INS-6` |
-| `.github/workflows/validate.yml` | CI running the acceptance commands (§9) | `ACC-4` |
+| `scripts/install.sh` | Installer (§10) | `INS-*` |
+| `scripts/validate_package.go` | Validator (§9) | `VAL-*` |
+| `docs/design.md` | Rationale document | `VAL-6`, `VAL-7`, `VAL-8`, `VAL-10` |
+| `docs/spec.md` | This document | `VAL-14` (§3 roster table) |
+| `docs/faq.md` | User FAQ | `VAL-7`, `VAL-12` |
+| `docs/cheatsheet.md` | Usage cheatsheet | `VAL-7`, `VAL-8`, `VAL-10`, `VAL-12` |
+| `README.md` | Overview + model mapping + `CLAUDE_CODE_SUBAGENT_MODEL` caveat | `VAL-7`, `VAL-8`, `VAL-12`, `MDL-3` |
+| `.github/workflows/validate.yml` | CI running the acceptance commands (§11) | `ACC-4` |
 
-`ART-3` There MUST be exactly ten agent files under `.claude/agents/`, one per role in §3. The installer, `SKILL.md`, `README.md`, `docs/design.md`, and `docs/faq.md` MUST reference the same ten role names (enforced by `VAL-6`, `VAL-11`, `VAL-12`).
+`ART-3` There MUST be exactly ten agent files under `.claude/agents/`, one per role in §3. The installer, `SKILL.md`, `README.md`, `docs/design.md`, `docs/faq.md`, and `docs/cheatsheet.md` MUST reference the same ten role names (enforced by `VAL-7`, `VAL-9`, `VAL-11`, `VAL-14`).
 
 `ART-4` The package MUST be distributed **file-based** (copied directly into `.claude/` or `~/.claude/`), MUST NOT be shipped as a Claude Code plugin as the primary distribution unit, because plugin subagents silently ignore `hooks`, `mcpServers`, and `permissionMode`. **[Deferred]** An additional plugin distribution MAY be published later, documented as not supporting hook-enforced read-only.
 
@@ -147,7 +148,7 @@ tools: Read, Grep, Glob, Bash, WebFetch, WebSearch, Edit, Write, NotebookEdit
 
 `SKL-5` In user-facing updates the parent SHOULD label each spawned subagent as `<role>: <task or scope>` (e.g. `helper-worker: dependency readiness review`). Any tool-generated agent id is traceability metadata only.
 
-`SKL-6` `SKILL.md` MUST contain an explicit dispatch list of the ten role names that matches the agent files exactly (`VAL-11`), and MUST contain a pattern registry (§7 below) that matches the one in `docs/design.md` (`VAL-12`).
+`SKL-6` `SKILL.md` MUST contain an explicit dispatch list of the ten role names that matches the agent files exactly (`VAL-9`), and MUST contain a pattern registry (§7 below) that matches the ones in `docs/design.md` and `docs/cheatsheet.md` (`VAL-10`).
 
 ## 7. Multi-Agent Patterns
 
@@ -212,19 +213,21 @@ The advisor MUST NOT edit files and MUST NOT produce user-facing output.
 
 `VAL-6` The validator MUST verify `tools` is well-formed, **never contains `Agent`**, and that the **derived access class** (writable iff `tools` includes `Edit` or `Write`) matches the Access column in `docs/design.md`.
 
-`VAL-7` The validator MUST verify `README.md`, `SKILL.md`, `docs/design.md`, and `docs/faq.md` mention every configured agent.
+`VAL-7` The validator MUST verify `README.md`, `SKILL.md`, `docs/design.md`, `docs/faq.md`, and `docs/cheatsheet.md` mention every configured agent as a standalone identifier — an occurrence embedded in a longer role name (e.g. `reviewer` inside `doc-reviewer`) MUST NOT count.
 
-`VAL-8` The validator MUST verify `README.md` and `docs/design.md` document each agent with its configured model on one line.
+`VAL-8` The validator MUST verify `README.md`, `docs/design.md`, and `docs/cheatsheet.md` document each agent with its configured model on one line.
 
 `VAL-9` The validator MUST verify `SKILL.md`'s exact dispatch list matches the agent files.
 
-`VAL-10` The validator MUST verify the pattern registries in `SKILL.md` and `docs/design.md` list the same pattern names, and that every role a pattern references exists as an agent file (**pattern-registry sync check**).
+`VAL-10` The validator MUST verify the pattern registries in `SKILL.md`, `docs/design.md`, and `docs/cheatsheet.md` list the same pattern names, and that every role a pattern references exists as an agent file (**pattern-registry sync check**).
 
 `VAL-11` The validator MUST verify `scripts/install.sh`'s agent list matches the agent files.
 
 `VAL-12` The validator MUST verify deprecated project identifiers (e.g. Agenticons/Codex-specific names) do not remain in primary docs.
 
 `VAL-13` The validator MUST exit non-zero on any failed check.
+
+`VAL-14` The validator MUST verify the on-disk roster matches the normative table in §3 exactly: the same ten role names and, per role, the same `model`, `effort` (including its required absence on Haiku roles), and derived access class (`AGT-1`, `ART-3`). This is the only check whose expected values are embedded in the validator rather than derived from the files on disk, so the roster cannot drift from the spec even when every doc is updated to match the drifted files.
 
 > The two conceptual changes from the Agenticons validator: (1) the access check validates a *derived* access class from the presence of editing tools rather than a literal `sandbox_mode` string (`VAL-6`); (2) the `effort`-validity (`VAL-5`) and `Agent`-exclusion (`VAL-6`) checks encode invariants implicit in Claude Code's model.
 
@@ -269,7 +272,7 @@ The advisor MUST NOT edit files and MUST NOT produce user-facing output.
 
 `ACC-4` `.github/workflows/validate.yml` MUST run `ACC-1`–`ACC-3` on every push and pull request.
 
-`ACC-5` All ten agent files, `SKILL.md`, `scripts/install.sh`, `README.md`, `docs/design.md`, and `docs/faq.md` MUST be mutually consistent per the validator checks (`VAL-1`–`VAL-13`).
+`ACC-5` All ten agent files, `SKILL.md`, `scripts/install.sh`, `README.md`, `docs/design.md`, `docs/faq.md`, and `docs/cheatsheet.md` MUST be mutually consistent per the validator checks (`VAL-1`–`VAL-14`).
 
 ## 12. Deferred Items (Open Questions)
 

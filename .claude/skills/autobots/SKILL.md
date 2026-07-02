@@ -91,7 +91,7 @@ label is what the user sees.
 - `edge-case-analyst` — edge-case and coverage-gap discovery (read-only)
 - `advisor` — guidance-only consultant for the advisory pattern (read-only)
 
-Every subagent above is spawned via the `Agent` tool with `agent_type: <name>`
+Every subagent above is spawned via the `Agent` tool with `subagent_type: <name>`
 matching its `.claude/agents/<name>.md` file. Each role is pinned to its own
 model and effort in its spec — do not override a role's model at dispatch
 time; model changes happen by editing the agent spec, never ad hoc. Per-role

@@ -36,7 +36,7 @@ The single most important part of this design is the faithful translation of eac
 | No nested delegation | `max_depth = 1` in `config.toml` | omit `Agent` from every role's `tools` (Claude Code otherwise allows nesting to depth 5) |
 | Agent nicknames | `nickname_candidates = [...]` | none — parent-side semantic labels only |
 | Role instructions | `developer_instructions = """..."""` | the Markdown body of the agent file |
-| Invocation | Codex subagent spawn | `Agent` tool with `agent_type: <name>`; auto-delegation driven by `description` |
+| Invocation | Codex subagent spawn | `Agent` tool with `subagent_type: <name>`; auto-delegation driven by `description` |
 | Dispatcher trigger | "Use agenticons." | "Use autobots." (also the `/autobots` slash command) |
 
 The two substitutions worth reading carefully are **access control** (Access Model) and the **model-routing caveat** below; everything else is a rename or a near-identical field.
@@ -279,12 +279,13 @@ It checks:
 - `model` is one of the supported aliases (`fable`, `opus`, `sonnet`, `haiku`)
 - `effort`, when present, is one of `low`/`medium`/`high`/`xhigh`/`max`, and is **absent on Haiku roles** (where it is inert)
 - `tools` is well-formed and **never contains `Agent`** (enforcing non-delegation), and the **derived access class** (writable iff `tools` includes `Edit` or `Write`) matches the Access column in `docs/design.md`
-- `README.md`, `SKILL.md`, `docs/design.md`, and `docs/faq.md` mention every configured agent
-- `README.md` and `docs/design.md` document each agent with its configured model on one line
+- `README.md`, `SKILL.md`, `docs/design.md`, `docs/faq.md`, and `docs/cheatsheet.md` mention every configured agent as a standalone identifier (a mention embedded in a longer role name, such as `reviewer` inside `doc-reviewer`, does not count)
+- `README.md`, `docs/design.md`, and `docs/cheatsheet.md` document each agent with its configured model on one line
 - `SKILL.md`'s exact dispatch list matches the agent files
-- the pattern registries in `SKILL.md` and `docs/design.md` list the same pattern names, and every role a pattern references exists as an agent file
+- the pattern registries in `SKILL.md`, `docs/design.md`, and `docs/cheatsheet.md` list the same pattern names, and every role a pattern references exists as an agent file
 - `scripts/install.sh`'s agent list matches the agent files
 - deprecated project identifiers do not remain in primary docs
+- the on-disk roster matches the normative table in `docs/spec.md` §3 exactly — the same ten role names and, per role, the pinned model, effort, and access class — so the roster cannot drift from the spec even if every doc is updated to match the drifted files
 
 Run validation and tests with:
 

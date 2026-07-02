@@ -1,9 +1,9 @@
 // Command validate_package protects the Autobots package contract described
-// in docs/spec.md §9 (VAL-1..VAL-13) and docs/design.md "Validation". It is
+// in docs/spec.md §9 (VAL-1..VAL-14) and docs/design.md "Validation". It is
 // the single source of truth for cross-file consistency between the agent
 // roster (.claude/agents/*.md), the dispatcher skill (SKILL.md), the docs
-// (README.md, docs/design.md, docs/faq.md), and the installer
-// (scripts/install.sh).
+// (README.md, docs/design.md, docs/faq.md, docs/cheatsheet.md), and the
+// installer (scripts/install.sh).
 //
 // Run it with:
 //
@@ -31,12 +31,13 @@ import (
 // ---------------------------------------------------------------------------
 
 const (
-	agentsDir     = ".claude/agents"
-	skillPath     = ".claude/skills/autobots/SKILL.md"
-	readmePath    = "README.md"
-	designPath    = "docs/design.md"
-	faqPath       = "docs/faq.md"
-	installPath   = "scripts/install.sh"
+	agentsDir      = ".claude/agents"
+	skillPath      = ".claude/skills/autobots/SKILL.md"
+	readmePath     = "README.md"
+	designPath     = "docs/design.md"
+	faqPath        = "docs/faq.md"
+	cheatsheetPath = "docs/cheatsheet.md"
+	installPath    = "scripts/install.sh"
 )
 
 var (
@@ -104,9 +105,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Source of truth: the ten role names, derived from the agent files on
+	// The cross-file checks derive the role names from the agent files on
 	// disk (filenames without .md), per the implementation guidance in the
-	// task brief and docs/spec.md ART-3.
+	// task brief and docs/spec.md ART-3. VAL-14 additionally pins the
+	// on-disk roster against the normative table in docs/spec.md §3, so
+	// disk cannot silently drift from spec.
 	expectedNames := make([]string, 0, len(specs))
 	for _, s := range specs {
 		expectedNames = append(expectedNames, s.filename)
@@ -117,6 +120,7 @@ func main() {
 	readme := mustRead(readmePath)
 	design := mustRead(designPath)
 	faq := mustRead(faqPath)
+	cheatsheet := mustRead(cheatsheetPath)
 	skill := mustRead(skillPath)
 	install := mustRead(installPath)
 
@@ -127,12 +131,13 @@ func main() {
 	checkVAL5(specs)
 	designAccess := parseDesignAccessTable(design)
 	checkVAL6(specs, designAccess)
-	checkVAL7(specs, expectedNames, readme, skill, design, faq)
-	checkVAL8(specs, expectedNames, readme, design)
+	checkVAL7(expectedNames, readme, skill, design, faq, cheatsheet)
+	checkVAL8(specs, expectedNames, readme, design, cheatsheet)
 	checkVAL9(skill, expectedSet)
-	checkVAL10(skill, design, expectedSet)
+	checkVAL10(skill, design, cheatsheet, expectedSet)
 	checkVAL11(install, expectedSet)
-	checkVAL12(readme, skill, faq, expectedNames)
+	checkVAL12(readme, skill, faq, cheatsheet, expectedNames)
+	checkVAL14(specs)
 
 	printReport()
 
@@ -466,23 +471,34 @@ func extractAllBackticks(s string) []string {
 }
 
 // ---------------------------------------------------------------------------
-// VAL-7: README/SKILL/design/faq each mention every configured agent name
+// VAL-7: README/SKILL/design/faq/cheatsheet each mention every configured
+// agent name as a standalone identifier
 // ---------------------------------------------------------------------------
 
-func checkVAL7(specs []*agentSpec, names []string, readme, skill, design, faq string) {
+// mentionsRole reports whether content mentions name as a standalone role
+// identifier. An occurrence embedded in a longer identifier does not count:
+// "doc-reviewer" must not satisfy a mention check for "reviewer", nor
+// "fast-coding-worker" one for "coding-worker".
+func mentionsRole(content, name string) bool {
+	re := regexp.MustCompile(`(^|[^A-Za-z0-9_-])` + regexp.QuoteMeta(name) + `($|[^A-Za-z0-9_-])`)
+	return re.MatchString(content)
+}
+
+func checkVAL7(names []string, readme, skill, design, faq, cheatsheet string) {
 	var fails []string
 	files := map[string]string{
-		readmePath: readme,
-		skillPath:  skill,
-		designPath: design,
-		faqPath:    faq,
+		readmePath:     readme,
+		skillPath:      skill,
+		designPath:     design,
+		faqPath:        faq,
+		cheatsheetPath: cheatsheet,
 	}
 	// Deterministic iteration order for stable output.
-	fileOrder := []string{readmePath, skillPath, designPath, faqPath}
+	fileOrder := []string{readmePath, skillPath, designPath, faqPath, cheatsheetPath}
 	for _, path := range fileOrder {
 		content := files[path]
 		for _, name := range names {
-			if !strings.Contains(content, name) {
+			if !mentionsRole(content, name) {
 				fails = append(fails, fmt.Sprintf("%s: does not mention agent %q", path, name))
 			}
 		}
@@ -491,8 +507,8 @@ func checkVAL7(specs []*agentSpec, names []string, readme, skill, design, faq st
 }
 
 // ---------------------------------------------------------------------------
-// VAL-8: README.md and docs/design.md document each agent with its model on
-// one line.
+// VAL-8: README.md, docs/design.md, and docs/cheatsheet.md document each
+// agent with its model on one line.
 // ---------------------------------------------------------------------------
 
 func modelTierWord(alias string) string {
@@ -502,7 +518,7 @@ func modelTierWord(alias string) string {
 	return strings.ToUpper(alias[:1]) + alias[1:]
 }
 
-func checkVAL8(specs []*agentSpec, names []string, readme, design string) {
+func checkVAL8(specs []*agentSpec, names []string, readme, design, cheatsheet string) {
 	var fails []string
 	modelByName := map[string]string{}
 	for _, s := range specs {
@@ -512,8 +528,8 @@ func checkVAL8(specs []*agentSpec, names []string, readme, design string) {
 		modelByName[s.filename] = strings.TrimSpace(s.frontmatter.Model)
 	}
 
-	files := map[string]string{readmePath: readme, designPath: design}
-	fileOrder := []string{readmePath, designPath}
+	files := map[string]string{readmePath: readme, designPath: design, cheatsheetPath: cheatsheet}
+	fileOrder := []string{readmePath, designPath, cheatsheetPath}
 	for _, path := range fileOrder {
 		lines := strings.Split(files[path], "\n")
 		for _, name := range names {
@@ -524,7 +540,7 @@ func checkVAL8(specs []*agentSpec, names []string, readme, design string) {
 			tier := modelTierWord(alias)
 			found := false
 			for _, line := range lines {
-				if strings.Contains(line, name) && (strings.Contains(line, alias) || strings.Contains(line, tier)) {
+				if mentionsRole(line, name) && (strings.Contains(line, alias) || strings.Contains(line, tier)) {
 					found = true
 					break
 				}
@@ -588,8 +604,8 @@ func checkVAL9(skill string, expectedSet map[string]bool) {
 }
 
 // ---------------------------------------------------------------------------
-// VAL-10: pattern registries in SKILL.md and docs/design.md match; every
-// referenced role exists as an agent file.
+// VAL-10: pattern registries in SKILL.md, docs/design.md, and
+// docs/cheatsheet.md match; every referenced role exists as an agent file.
 // ---------------------------------------------------------------------------
 
 const patternTableHeader = "| Pattern | Triggers | Roles used |"
@@ -623,35 +639,35 @@ func parsePatternTable(content string) map[string]string {
 	return table
 }
 
-func checkVAL10(skill, design string, expectedSet map[string]bool) {
+func checkVAL10(skill, design, cheatsheet string, expectedSet map[string]bool) {
 	var fails []string
 
-	skillPatterns := parsePatternTable(skill)
-	designPatterns := parsePatternTable(design)
+	sources := []struct {
+		path     string
+		patterns map[string]string
+	}{
+		{skillPath, parsePatternTable(skill)},
+		{designPath, parsePatternTable(design)},
+		{cheatsheetPath, parsePatternTable(cheatsheet)},
+	}
 
-	if len(skillPatterns) == 0 {
-		fails = append(fails, fmt.Sprintf("%s: no pattern registry table found (header %q)", skillPath, patternTableHeader))
-	}
-	if len(designPatterns) == 0 {
-		fails = append(fails, fmt.Sprintf("%s: no pattern registry table found (header %q)", designPath, patternTableHeader))
-	}
-
-	skillNames := map[string]bool{}
-	for k := range skillPatterns {
-		skillNames[k] = true
-	}
-	designNames := map[string]bool{}
-	for k := range designPatterns {
-		designNames[k] = true
-	}
-	for name := range skillNames {
-		if !designNames[name] {
-			fails = append(fails, fmt.Sprintf("pattern %q appears in %s but not in %s", name, skillPath, designPath))
+	for _, src := range sources {
+		if len(src.patterns) == 0 {
+			fails = append(fails, fmt.Sprintf("%s: no pattern registry table found (header %q)", src.path, patternTableHeader))
 		}
 	}
-	for name := range designNames {
-		if !skillNames[name] {
-			fails = append(fails, fmt.Sprintf("pattern %q appears in %s but not in %s", name, designPath, skillPath))
+
+	// The registries must list the same pattern names in every source.
+	for _, a := range sources {
+		for _, b := range sources {
+			if a.path == b.path {
+				continue
+			}
+			for name := range a.patterns {
+				if _, ok := b.patterns[name]; !ok {
+					fails = append(fails, fmt.Sprintf("pattern %q appears in %s but not in %s", name, a.path, b.path))
+				}
+			}
 		}
 	}
 
@@ -659,25 +675,19 @@ func checkVAL10(skill, design string, expectedSet map[string]bool) {
 	// like a role name (roleNameRe) and is one of the ten known role names
 	// must exist as an agent file. Non-role phrases such as "all roles" are
 	// not backticked and are ignored by construction.
-	checkRoles := func(source string, patterns map[string]string) {
-		for pattern, cell := range patterns {
+	for _, src := range sources {
+		for pattern, cell := range src.patterns {
 			for _, tok := range extractAllBackticks(cell) {
 				if !roleNameRe.MatchString(tok) {
 					continue
 				}
 				if !expectedSet[tok] {
-					// Not one of the ten known role names — could be a
-					// non-role backticked term; only flag if it looks like
-					// a role reference within a "roles used" cell but isn't
-					// a known role at all AND isn't part of a longer phrase.
 					fails = append(fails, fmt.Sprintf(
-						"%s: pattern %q references role `%s` which is not an existing agent file", source, pattern, tok))
+						"%s: pattern %q references role `%s` which is not an existing agent file", src.path, pattern, tok))
 				}
 			}
 		}
 	}
-	checkRoles(skillPath, skillPatterns)
-	checkRoles(designPath, designPatterns)
 
 	sort.Strings(fails)
 	record("VAL-10", len(fails) == 0, fails...)
@@ -751,19 +761,20 @@ func scanLineForEntries(line string, found map[string]bool) {
 // VAL-12: no deprecated snake_case role identifiers in primary docs
 // ---------------------------------------------------------------------------
 
-// checkVAL12 intentionally scopes its scan to README.md, SKILL.md, and
-// docs/faq.md only. docs/design.md is excluded because it legitimately
-// discusses the Codex snake_case -> Claude kebab-case naming mapping (e.g.
-// "coding_worker" as the Agenticons/Codex identifier being translated), and
-// docs/spec.md is excluded for the same reason (it documents the mapping
-// too). Scanning those files would produce false positives on prose that is
-// *about* the deprecated identifiers rather than *using* them as live
-// identifiers. The literal filename "validate_package" (this script) is not
-// a role identifier and must never be flagged.
-func checkVAL12(readme, skill, faq string, names []string) {
+// checkVAL12 intentionally scopes its scan to README.md, SKILL.md,
+// docs/faq.md, and docs/cheatsheet.md only. docs/design.md is excluded
+// because it legitimately discusses the Codex snake_case -> Claude
+// kebab-case naming mapping (e.g. "coding_worker" as the Agenticons/Codex
+// identifier being translated), and docs/spec.md is excluded for the same
+// reason (it documents the mapping too). Scanning those files would produce
+// false positives on prose that is *about* the deprecated identifiers
+// rather than *using* them as live identifiers. The literal filename
+// "validate_package" (this script) is not a role identifier and must never
+// be flagged.
+func checkVAL12(readme, skill, faq, cheatsheet string, names []string) {
 	var fails []string
-	files := map[string]string{readmePath: readme, skillPath: skill, faqPath: faq}
-	fileOrder := []string{readmePath, skillPath, faqPath}
+	files := map[string]string{readmePath: readme, skillPath: skill, faqPath: faq, cheatsheetPath: cheatsheet}
+	fileOrder := []string{readmePath, skillPath, faqPath, cheatsheetPath}
 	for _, path := range fileOrder {
 		content := files[path]
 		for _, name := range names {
@@ -777,6 +788,86 @@ func checkVAL12(readme, skill, faq string, names []string) {
 		}
 	}
 	record("VAL-12", len(fails) == 0, fails...)
+}
+
+// ---------------------------------------------------------------------------
+// VAL-14: the on-disk roster matches the normative table in docs/spec.md §3
+// exactly — the same ten role names and, per role, the pinned model, effort,
+// and derived access class (AGT-1, ART-3). The other checks derive the
+// roster from disk; this one keeps disk honest against the spec, so a role
+// cannot be added, dropped, or moved to another tier without a deliberate
+// spec (and validator) change.
+// ---------------------------------------------------------------------------
+
+type rosterEntry struct {
+	model    string
+	effort   string // "" means the effort field must be omitted (Haiku roles)
+	writable bool
+}
+
+// expectedRoster mirrors docs/spec.md §3 AGT-1. Changing it is a contract
+// change: update the spec table and every doc the validator checks in the
+// same commit.
+var expectedRoster = map[string]rosterEntry{
+	"planner":            {model: "opus", effort: "high", writable: false},
+	"coding-worker":      {model: "sonnet", effort: "medium", writable: true},
+	"fast-coding-worker": {model: "haiku", effort: "", writable: true},
+	"helper-worker":      {model: "haiku", effort: "", writable: false},
+	"forensic-analyst":   {model: "fable", effort: "xhigh", writable: false},
+	"doc-reviewer":       {model: "haiku", effort: "", writable: false},
+	"reviewer":           {model: "opus", effort: "high", writable: false},
+	"qa-engineer":        {model: "opus", effort: "high", writable: true},
+	"edge-case-analyst":  {model: "fable", effort: "xhigh", writable: false},
+	"advisor":            {model: "fable", effort: "xhigh", writable: false},
+}
+
+func checkVAL14(specs []*agentSpec) {
+	var fails []string
+	seen := map[string]bool{}
+	for _, s := range specs {
+		if s.parseErr != nil {
+			continue // already reported under VAL-1
+		}
+		seen[s.filename] = true
+		want, ok := expectedRoster[s.filename]
+		if !ok {
+			fails = append(fails, fmt.Sprintf("%s: role %q is not in the normative roster (docs/spec.md §3)", s.path, s.filename))
+			continue
+		}
+		if got := strings.TrimSpace(s.frontmatter.Model); got != want.model {
+			fails = append(fails, fmt.Sprintf("%s: model %q does not match the normative roster (%q)", s.path, got, want.model))
+		}
+		if got := strings.TrimSpace(s.frontmatter.Effort); got != want.effort {
+			if want.effort == "" {
+				fails = append(fails, fmt.Sprintf("%s: effort %q must be omitted per the normative roster", s.path, got))
+			} else {
+				fails = append(fails, fmt.Sprintf("%s: effort %q does not match the normative roster (%q)", s.path, got, want.effort))
+			}
+		}
+		writable := false
+		for _, tok := range parseToolTokens(s.frontmatter.Tools) {
+			if tok == "Edit" || tok == "Write" {
+				writable = true
+			}
+		}
+		if writable != want.writable {
+			wantClass, gotClass := "read-only", "read-only"
+			if want.writable {
+				wantClass = "writable"
+			}
+			if writable {
+				gotClass = "writable"
+			}
+			fails = append(fails, fmt.Sprintf("%s: derived access class %q does not match the normative roster (%q)", s.path, gotClass, wantClass))
+		}
+	}
+	for name := range expectedRoster {
+		if !seen[name] {
+			fails = append(fails, fmt.Sprintf("%s/%s.md: normative roster role %q has no agent file on disk", agentsDir, name, name))
+		}
+	}
+	sort.Strings(fails)
+	record("VAL-14", len(fails) == 0, fails...)
 }
 
 // ---------------------------------------------------------------------------

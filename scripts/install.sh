@@ -187,16 +187,28 @@ AGENTS_DEST_DIR="${DEST_ROOT}/agents"
 # pipe using AUTOBOTS_REPO and --ref.
 # ---------------------------------------------------------------------------
 
-# Directory this script lives in (works for local execution; irrelevant,
-# but harmless, when streamed via `curl | bash`, where $0 is "bash").
+# Locate a source checkout next to this script. Only attempt this when the
+# script actually exists on disk: when streamed via `curl | bash`, $0 is
+# "bash", dirname resolves to the CWD, and the CWD's *parent* may hold an
+# installed Autobots payload (a previously installed target repo, or $HOME
+# with a --global install under ~/.claude) that must not be mistaken for a
+# source checkout — that mistake would silently reinstall the already
+# installed files onto themselves and ignore --ref.
 SCRIPT_SOURCE="${BASH_SOURCE[0]:-$0}"
-SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" >/dev/null 2>&1 && pwd || true)"
 LOCAL_REPO_ROOT=""
 
-if [ -n "$SCRIPT_DIR" ]; then
-  CANDIDATE="$(cd "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd || true)"
-  if [ -n "$CANDIDATE" ] && [ -f "$CANDIDATE/.claude/skills/autobots/SKILL.md" ]; then
-    LOCAL_REPO_ROOT="$CANDIDATE"
+if [ -f "$SCRIPT_SOURCE" ]; then
+  SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" >/dev/null 2>&1 && pwd || true)"
+  if [ -n "$SCRIPT_DIR" ]; then
+    CANDIDATE="$(cd "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd || true)"
+    # A source checkout carries the installer and spec alongside the payload;
+    # an install destination carries the payload alone.
+    if [ -n "$CANDIDATE" ] \
+      && [ -f "$CANDIDATE/.claude/skills/autobots/SKILL.md" ] \
+      && [ -f "$CANDIDATE/scripts/install.sh" ] \
+      && [ -f "$CANDIDATE/docs/spec.md" ]; then
+      LOCAL_REPO_ROOT="$CANDIDATE"
+    fi
   fi
 fi
 

@@ -54,7 +54,7 @@ subagent — delegation is exactly one level deep.
 
 ## Patterns
 
-| Pattern | Trigger | Roles |
+| Pattern | Triggers | Roles used |
 |---|---|---|
 | `orchestrator-worker` (default) | any autobots dispatch that names no other pattern | all roles |
 | `advisory` | "use the advisor strategy", "advisory pattern", or "cheap executor + advisor" | one writable executor (`coding-worker` **or** `fast-coding-worker`) + `advisor` |
