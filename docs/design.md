@@ -73,7 +73,7 @@ Claude Code resolves a subagent's model in this order (first match wins):
 3. the subagent frontmatter `model:`
 4. the main conversation's model
 
-**Consequence:** if `CLAUDE_CODE_SUBAGENT_MODEL` is set, it overrides the frontmatter `model:` that Autobots ships, collapsing the whole roster onto one model. This is not hypothetical on the author's machine — `~/.claude/settings.json` currently sets `CLAUDE_CODE_SUBAGENT_MODEL: "sonnet"`, which would run every Autobots role as Sonnet regardless of its spec. The package must document that per-role model routing requires `CLAUDE_CODE_SUBAGENT_MODEL` to be **unset**, and the installer/README should surface this prominently (the installer can detect the env var and warn).
+**Consequence:** if `CLAUDE_CODE_SUBAGENT_MODEL` is set, it overrides the frontmatter `model:` that Autobots ships, collapsing the whole roster onto one model. This is not a hypothetical edge case: it is easy to have this variable set globally — in `~/.claude/settings.json` or the shell environment (for example, to `"sonnet"`) for unrelated reasons — and forget it is there, in which case every Autobots role would run as that one model regardless of its spec. The package must document that per-role model routing requires `CLAUDE_CODE_SUBAGENT_MODEL` to be **unset**, and the installer/README should surface this prominently (the installer can detect the env var and warn).
 
 ## Agent Roles
 

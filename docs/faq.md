@@ -60,5 +60,3 @@ Claude Code plugins bundle `agents/` and `skills/` behind a marketplace manifest
 ## How do I add or change a role?
 
 Update the role's `.claude/agents/<name>.md` file (frontmatter: `name`, `description`, `model`, `effort` where applicable, `tools`; plus a Markdown body with role responsibility, a non-delegation clause, an access clause for read-only roles, and an output contract), then update `SKILL.md`'s dispatch list, `README.md`'s model-mapping table, the agent list in `scripts/install.sh`, and `docs/design.md`/`docs/spec.md` in the same change. Never grant a new or changed role the `Agent` tool — that invariant is what keeps delegation exactly one level deep. Model, effort, and access-class changes are contract changes: they affect what users can rely on, so they should be deliberate rather than incidental, and the validator (`go run ./scripts/validate_package.go`) checks that all of these files stay mutually consistent before you publish.
-</content>
-</invoke>

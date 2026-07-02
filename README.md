@@ -100,8 +100,7 @@ A request for an unregistered pattern falls back to `orchestrator-worker`, with 
 
 ## Further reading
 
+- [`docs/cheatsheet.md`](docs/cheatsheet.md) — quick reference for triggering dispatch, the roster, patterns, and recipes.
 - [`docs/design.md`](docs/design.md) — rationale, the full Codex → Claude Code mapping, and open questions.
 - [`docs/spec.md`](docs/spec.md) — the normative, buildable contract.
 - [`docs/faq.md`](docs/faq.md) — practical Q&A.
-</content>
-</invoke>
