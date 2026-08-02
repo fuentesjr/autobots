@@ -61,6 +61,7 @@ The installer is `scripts/install.sh`. It accepts:
 | `--global` | Install for the current user under `~/.claude` instead of a repo. |
 | `--dry-run` | Preview writes without applying them. |
 | `--force` | Overwrite existing files that differ from the shipped versions. |
+| `--symlink` | Symlink the skill directory and each agent file to this checkout instead of copying them. Local-checkout mode only — errors in remote installs. |
 | `--ref <git-ref>` | When installing remotely, pull from a specific Git ref instead of the default branch. |
 
 It writes the dispatcher skill to `.claude/skills/autobots/SKILL.md` and the ten agent files to `.claude/agents/<name>.md` (or their `~/.claude` equivalents under `--global`).
@@ -82,6 +83,8 @@ curl -fsSL https://raw.githubusercontent.com/fuentesjr/autobots/main/scripts/ins
 Add `--global` to either form to install under `~/.claude` instead of a specific repo. Add `--ref <git-ref>` to the remote form to install from a tag, branch, or commit other than the default.
 
 By default the installer will not overwrite existing files that differ from the shipped versions; pass `--force` to overwrite them, or `--dry-run` first to preview exactly what would be written.
+
+By default the installer copies files, so a target repo (or `--global` install) gets a self-contained snapshot. Pass `--symlink` from a local checkout to link into the checkout instead — `<DEST_ROOT>/skills/autobots` becomes a directory symlink to the checkout's skill directory, and each `<DEST_ROOT>/agents/<name>.md` becomes a symlink to the matching file — so the install tracks the checkout as you edit it, with no reinstall needed. `--symlink` requires a local checkout; it errors in remote (`curl | bash`) installs. Its links are absolute and machine-specific, so it's meant for a maintainer's own live setup (e.g. `--global`), not for a `--target` repo that commits its `.claude/` directory.
 
 **After installing, start a new Claude Code session.** Subagent file changes under `.claude/agents/` are only picked up at session start (unless made live via `/agents`); skill changes under `.claude/skills/` are picked up immediately, but starting fresh ensures the whole roster is loaded consistently.
 

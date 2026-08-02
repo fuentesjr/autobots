@@ -117,6 +117,9 @@ bash scripts/install.sh --global
 bash scripts/install.sh --target . --dry-run
 bash scripts/install.sh --target . --force
 
+# symlink into a local checkout instead of copying (local-checkout mode only)
+bash scripts/install.sh --global --symlink
+
 # remote, from a git ref
 curl -fsSL https://raw.githubusercontent.com/fuentesjr/autobots/main/scripts/install.sh | bash -s -- --global --ref main
 ```
