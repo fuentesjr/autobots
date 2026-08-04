@@ -274,6 +274,8 @@ The advisor MUST NOT edit files and MUST NOT produce user-facing output.
 - **Copy-mode symlink awareness.** A copy-mode (`INS-5`) install MUST treat an existing destination that is itself a symlink, or whose parent directory is a symlink (e.g. a prior `--symlink` skill install), as its own conflict class rather than writing through it — `cp` follows a live symlink and would otherwise silently modify whatever it points at. This MUST be detected even when the link is dangling (target moved or deleted), and the same conflict/`--force` rules as `INS-5` apply, with the link itself removed before the real file is written.
 - **Default remains copy.** `--symlink` is opt-in; without it the installer copies files as described in `INS-2`/`INS-5`, so target repos continue to receive a self-contained snapshot rather than a link into someone else's checkout.
 
+`INS-9` `scripts/install.sh` MUST have an executable test harness (`scripts/test_install.sh`) that exercises it end-to-end rather than relying on manual verification alone. The harness MUST, at minimum, cover: a fresh copy install and its idempotent re-run; a fresh `--symlink` install (with `readlink` assertions) and its idempotent re-run; a conflict without `--force` leaving the destination untouched, and `--force` overwriting/relinking it; `--dry-run` writing nothing in both copy and symlink modes; remote-mode `--symlink` rejection before any network access; self-install refusal from the checkout's own `cwd` and via multiple `--target` spellings (absolute, trailing-slash, relative, `.`); the `--symlink` self-reference guard's per-entry case specifically — a destination `agents/` directory that is itself a symlink back into the checkout — which MUST die with the self-reference error and leave the source checkout intact; copy-mode installing over an existing symlink from a second source checkout, both with and without `--force`; a missing source file dying in both copy and symlink modes with no dangling link left behind; recovery from a moved/renamed checkout via a copy `--force` re-run; and an empty `--target` dying. Every test MUST install from a copy of the repo's payload into a `mktemp -d` sandbox and MUST NOT write outside that sandbox, including via `--global` (the harness MUST set `HOME` to a sandbox directory for the whole test process as a guard against this).
+
 ## 11. Acceptance Criteria
 
 `ACC-1` `go run ./scripts/validate_package.go` MUST pass (exit 0) with the full package present.
@@ -282,9 +284,11 @@ The advisor MUST NOT edit files and MUST NOT produce user-facing output.
 
 `ACC-3` `go vet ./...` MUST pass.
 
-`ACC-4` `.github/workflows/validate.yml` MUST run `ACC-1`–`ACC-3` on every push and pull request.
+`ACC-4` `.github/workflows/validate.yml` MUST run `ACC-1`–`ACC-3` and `ACC-6` on every push and pull request.
 
 `ACC-5` All ten agent files, `SKILL.md`, `scripts/install.sh`, `README.md`, `docs/design.md`, `docs/faq.md`, and `docs/cheatsheet.md` MUST be mutually consistent per the validator checks (`VAL-1`–`VAL-14`).
+
+`ACC-6` `scripts/test_install.sh` (`INS-9`) MUST pass (exit 0).
 
 ## 12. Deferred Items (Open Questions)
 

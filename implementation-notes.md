@@ -216,3 +216,64 @@ survives; fresh symlink install 11 created, re-run 11 skipped; shellcheck unchan
 pre-existing only); validator all-pass. Parked owner decisions: an executable install.sh test
 harness in CI (both review rounds argue for it — this hole was a one-probe find), and whether
 `--symlink` belongs in spec INS-1's flag table or only in INS-8.
+
+## Task 3 — executable test harness for `scripts/install.sh` (`scripts/test_install.sh`)
+
+Closed the parked gap from the previous round: plain-bash harness, no framework, matching
+`install.sh`'s own style (`mktemp -d` fixtures, `log`/`warn`/`err`/`die`-style helpers here
+recast as `pass`/`fail`/`assert_*`). 16 `test_*` functions, 84 assertions, covering every
+scenario in `docs/spec.md` `INS-9` (added alongside this harness) — fresh copy install +
+idempotent re-run, fresh `--symlink` install + idempotent re-run, conflict/`--force` in both
+modes, `--dry-run` writing nothing in both modes, remote-mode `--symlink` rejection before any
+network access, self-install refusal from bare `cwd` and four `--target` spellings, the
+symlinked-destination-`agents/`-dir attack (the canon_path regression), copy-over-symlink from a
+second source checkout, missing source in both modes, moved-checkout recovery, and empty
+`--target`. Every test copies the repo's payload into its own `mktemp -d` sandbox (top-level
+entries copied individually, skipping `.git`/`.trk`, so `cp` never touches `.git`'s fsmonitor
+socket) and never runs `install.sh` against `$REPO_ROOT` directly; `HOME` is pointed at a
+sandbox dir for the whole process as a belt-and-braces guard against any `--global` path.
+
+**Portability gotcha caught by running it**: macOS's `$TMPDIR` carries a trailing slash, so an
+un-normalized `TEST_ROOT` produced double slashes in every expected symlink-target string while
+`install.sh`'s own `pwd`-based path resolution collapses them — a false mismatch on every
+`readlink` assertion, not a real bug. Fixed by normalizing `TEST_ROOT` through `cd ... && pwd`
+once at the top.
+
+**Red-green evidence for the canon_path regression** (the per-entry `--symlink` self-reference
+guard that was inert for all ten agent entries, fixed in the prior round): no separate git commit
+holds the pre-fix `install_symlink` — the whole `--symlink` feature and its two review rounds
+landed in one commit (`3a2418f`) — so the buggy version was reconstructed by reverting exactly
+the one-line fix `implementation-notes.md`'s own "Re-review round" entry describes (`target_canon`
+resolved directly via `canon_path "$target"` instead of parent-then-leaf), in a throwaway copy
+under the scratchpad, never committed. Running the symlinked-`agents/`-dir attack against both:
+buggy script → exit 0, no error, `planner.md` in the *source* checkout is destroyed (replaced
+with a symlink pointing at itself, uncommitted-marker content gone) — reproduces the described
+failure mode exactly; HEAD's script → exit 1, `ERROR: cannot symlink a checkout onto itself: ...`,
+source checkout's marker content survives untouched. Confirms the harness's
+`test_symlinked_agents_dir_attack` (same assertions: exit code, error text, marker survival)
+fails red against the pre-fix code and passes green against HEAD.
+
+**Verification**: `bash scripts/test_install.sh` — 84/84 pass, exit 0; run twice back to back,
+identical results both times, no leftover state (each run gets its own `mktemp -d` root, cleaned
+via `trap ... EXIT`); confirmed via `git status` that neither run touched the real repo.
+`shellcheck scripts/install.sh` — unchanged, the one pre-existing `SC2034` warning only.
+`shellcheck scripts/test_install.sh` — one `SC2329` info-level false positive (`cleanup` is
+invoked via `trap cleanup EXIT`, not a direct call; shellcheck's reachability analysis doesn't see
+through `trap` once `main()`'s call graph is present) — suppressed with a one-line
+`# shellcheck disable=SC2329` plus the reason, script is otherwise clean. `go run
+./scripts/validate_package.go` — 13/13 PASS. `go vet ./...` — clean. `go test ./...` — pass.
+
+**Wiring**: `.github/workflows/validate.yml` gained an `Install script tests (ACC-6)` step
+running `./scripts/test_install.sh` alongside the three Go steps. `docs/spec.md` gained `INS-9`
+(the harness's required coverage, under §10 Installer Requirements, since it's specifically an
+installer-testing requirement) and `ACC-6` (`scripts/test_install.sh` MUST pass), with `ACC-4`
+updated to say CI runs `ACC-1`–`ACC-3` and `ACC-6`. `docs/design.md`'s Validation section gained
+the fourth command and a pointer to `INS-9`/this file. README and `docs/cheatsheet.md` have no
+"how to run checks" section to update — the only place that documents the validation commands is
+`docs/design.md`'s Validation section, already updated.
+
+**Residual risk / open questions**: none identified for the harness itself. Noticed but out of
+scope: `.gitignore` (extra `.trk/lock` line), `.gitattributes`, and `.trk/` are locally modified/
+untracked in this working tree with `Jul 20` mtimes — predates this task's session entirely
+(confirmed via `stat`), not touched by this change, flagged here only so it isn't mistaken for
+something this task did.

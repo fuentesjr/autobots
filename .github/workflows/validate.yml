@@ -24,3 +24,6 @@ jobs:
 
       - name: Vet (ACC-3)
         run: go vet ./...
+
+      - name: Install script tests (ACC-6)
+        run: ./scripts/test_install.sh

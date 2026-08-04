@@ -293,9 +293,10 @@ Run validation and tests with:
 go run ./scripts/validate_package.go
 go test ./...
 go vet ./...
+./scripts/test_install.sh
 ```
 
-`.github/workflows/validate.yml` runs all three on every push and pull request.
+`.github/workflows/validate.yml` runs all four on every push and pull request. The last is a plain-bash executable test harness for `scripts/install.sh` (no framework, `mktemp -d` fixtures) — see `docs/spec.md` `INS-9` for what it must cover and `implementation-notes.md` for why it exists: two adversarial review rounds each found a real bug in the `--symlink` self-reference guard reachable in minutes with a throwaway directory, and the harness is the missing detection loop for a script with an `rm -rf` path.
 
 The conceptual changes from Agenticons are (1) the access check validates a *derived* access class from the presence of editing tools rather than a literal `sandbox_mode` string, and (2) two new checks — `effort` validity and the `Agent`-exclusion rule — encode invariants that are implicit in Claude Code's model rather than declared by a single field.
 
