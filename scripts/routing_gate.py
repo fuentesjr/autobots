@@ -109,14 +109,15 @@ def run_claude(prompt: str, model: str) -> str:
 
 
 def run_grok(prompt: str, model: str) -> str:
-    # Non-interactive: pass prompt as positional; disable tools for routing-only.
+    # Headless single-turn: -p/--single prints response and exits.
     cmd = [
         "grok",
-        "--model",
-        model,
-        "--always-approve",
-        "--disable-mcp",
+        "-p",
         prompt,
+        "-m",
+        model,
+        "--tools",
+        "",
     ]
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
     if r.returncode != 0:
