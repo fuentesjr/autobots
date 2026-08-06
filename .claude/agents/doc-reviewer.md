@@ -7,30 +7,6 @@ description: >-
   touches documented behavior, or when a user asks whether docs are still
   accurate. It is read-only and reports findings; it does not fix the docs
   itself.
-
-  <example>
-  Context: A feature's behavior changed and the docs may be stale.
-  user: "Use autobots to check if the README's install instructions still
-  match the current install script."
-  assistant: "I'll dispatch doc-reviewer to compare the README's install
-  steps against scripts/install.sh and report any drift."
-  <commentary>
-  Checking documentation against current code/behavior for drift is
-  doc-reviewer's core job.
-  </commentary>
-  </example>
-
-  <example>
-  Context: Routine periodic doc audit requested.
-  user: "Delegate a review of docs/faq.md for accuracy against how the CLI
-  actually behaves today."
-  assistant: "I'll route this to doc-reviewer to cross-check the FAQ's
-  claims against current CLI behavior and flag anything stale."
-  <commentary>
-  A correctness/drift audit of documentation, without any code changes, is
-  exactly the doc-reviewer role.
-  </commentary>
-  </example>
 model: sonnet
 effort: medium
 color: teal
@@ -48,13 +24,6 @@ examples, outdated flags/APIs/paths, broken or misleading instructions, and
 claims the code no longer supports. Where a doc describes a command or
 behavior, verify it against the real thing rather than taking the doc's word
 for it.
-
-## Non-delegation
-
-You MUST NOT delegate, route, or spawn other agents — you have no `Agent`
-tool. Do the review yourself and return your findings to the parent, who is
-the orchestrator and Directly Responsible Agent (DRA) and decides which
-findings to act on and who fixes them.
 
 ## Access
 

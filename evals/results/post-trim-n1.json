@@ -1,0 +1,176 @@
+{
+  "provider": "claude",
+  "model": "sonnet",
+  "strip_examples": false,
+  "n": 1,
+  "cases": [
+    {
+      "id": "canary-helper",
+      "expected": "helper-worker",
+      "pass": 1,
+      "n": 1,
+      "rate": 1.0,
+      "trials": [
+        {
+          "trial": 1,
+          "raw": "helper-worker",
+          "answer": "helper-worker",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "id": "helper-vs-forensic",
+      "expected": "forensic-analyst",
+      "pass": 1,
+      "n": 1,
+      "rate": 1.0,
+      "trials": [
+        {
+          "trial": 1,
+          "raw": "forensic-analyst",
+          "answer": "forensic-analyst",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "id": "fast-vs-coding",
+      "expected": "fast-coding-worker",
+      "pass": 1,
+      "n": 1,
+      "rate": 1.0,
+      "trials": [
+        {
+          "trial": 1,
+          "raw": "fast-coding-worker",
+          "answer": "fast-coding-worker",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "id": "coding-normal",
+      "expected": "coding-worker",
+      "pass": 1,
+      "n": 1,
+      "rate": 1.0,
+      "trials": [
+        {
+          "trial": 1,
+          "raw": "coding-worker",
+          "answer": "coding-worker",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "id": "reviewer-security",
+      "expected": "reviewer",
+      "pass": 1,
+      "n": 1,
+      "rate": 1.0,
+      "trials": [
+        {
+          "trial": 1,
+          "raw": "reviewer",
+          "answer": "reviewer",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "id": "qa-e2e",
+      "expected": "qa-engineer",
+      "pass": 1,
+      "n": 1,
+      "rate": 1.0,
+      "trials": [
+        {
+          "trial": 1,
+          "raw": "qa-engineer",
+          "answer": "qa-engineer",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "id": "doc-drift",
+      "expected": "doc-reviewer",
+      "pass": 1,
+      "n": 1,
+      "rate": 1.0,
+      "trials": [
+        {
+          "trial": 1,
+          "raw": "doc-reviewer",
+          "answer": "doc-reviewer",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "id": "planner-decompose",
+      "expected": "planner",
+      "pass": 1,
+      "n": 1,
+      "rate": 1.0,
+      "trials": [
+        {
+          "trial": 1,
+          "raw": "planner",
+          "answer": "planner",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "id": "edge-cases",
+      "expected": "edge-case-analyst",
+      "pass": 1,
+      "n": 1,
+      "rate": 1.0,
+      "trials": [
+        {
+          "trial": 1,
+          "raw": "edge-case-analyst",
+          "answer": "edge-case-analyst",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "id": "advisor-consult",
+      "expected": "advisor",
+      "pass": 1,
+      "n": 1,
+      "rate": 1.0,
+      "trials": [
+        {
+          "trial": 1,
+          "raw": "advisor",
+          "answer": "advisor",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "id": "escape-hatch",
+      "expected": "none",
+      "pass": 1,
+      "n": 1,
+      "rate": 1.0,
+      "trials": [
+        {
+          "trial": 1,
+          "raw": "none",
+          "answer": "none",
+          "ok": true
+        }
+      ]
+    }
+  ],
+  "pass_rate": 1.0,
+  "n_pass": 11,
+  "n_total": 11
+}

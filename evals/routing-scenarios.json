@@ -1,0 +1,62 @@
+{
+  "version": "1",
+  "n_trials": 3,
+  "model": "sonnet",
+  "cases": [
+    {
+      "id": "canary-helper",
+      "expected": "helper-worker",
+      "prompt": "Use autobots to check how retries are currently implemented across our HTTP clients before we change anything."
+    },
+    {
+      "id": "helper-vs-forensic",
+      "expected": "forensic-analyst",
+      "prompt": "Use autobots to figure out why the checkout job fails about 1 in 20 runs with no clear pattern."
+    },
+    {
+      "id": "fast-vs-coding",
+      "expected": "fast-coding-worker",
+      "prompt": "Use autobots to fix the typo in the error message on line 42 of utils.py."
+    },
+    {
+      "id": "coding-normal",
+      "expected": "coding-worker",
+      "prompt": "Use autobots to implement the retry-with-backoff logic for the payment client."
+    },
+    {
+      "id": "reviewer-security",
+      "expected": "reviewer",
+      "prompt": "Use autobots for a security review of the new file-upload handler before we ship it."
+    },
+    {
+      "id": "qa-e2e",
+      "expected": "qa-engineer",
+      "prompt": "Use autobots to make sure the new CSV export feature actually works end-to-end before we release."
+    },
+    {
+      "id": "doc-drift",
+      "expected": "doc-reviewer",
+      "prompt": "Use autobots to check if the README install instructions still match the current install script."
+    },
+    {
+      "id": "planner-decompose",
+      "expected": "planner",
+      "prompt": "Use autobots to plan multi-tenant support for the billing service before any code is written."
+    },
+    {
+      "id": "edge-cases",
+      "expected": "edge-case-analyst",
+      "prompt": "Use autobots to find edge cases we might have missed in the new date-range parser."
+    },
+    {
+      "id": "advisor-consult",
+      "expected": "advisor",
+      "prompt": "The executor says it's blocked on whether to add the cache at the repository layer or the service layer \u2014 it listed both options with tradeoffs. Use the advisor strategy and get guidance."
+    },
+    {
+      "id": "escape-hatch",
+      "expected": "none",
+      "prompt": "Use autobots to refactor the auth module, but handle locally \u2014 no subagents."
+    }
+  ]
+}

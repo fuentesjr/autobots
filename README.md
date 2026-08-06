@@ -101,6 +101,18 @@ Roles are the primitives; patterns are parent-side recipes for composing them. A
 
 A request for an unregistered pattern falls back to `orchestrator-worker`, with a note to the user. See `docs/design.md` for the full pattern contract and `docs/faq.md` for a practical walkthrough of the advisory consult loop.
 
+
+## Relationship to Optimites (fork loop)
+
+**Autobots is the canonical fork** for the shared dispatcher contract (SKL/ADV sections, roster role semantics, pattern registry). [Optimites](https://github.com/fuentesjr/optimites) is the Grok Build port. Before editing shared behavior in either repo, run:
+
+```bash
+./scripts/fork-diff.sh
+# or: OPTIMITES_ROOT=/path/to/optimites ./scripts/fork-diff.sh
+```
+
+Port intentional shared changes into Autobots first, then into Optimites. Platform-specific tool names, model pins, and install paths are expected to differ.
+
 ## Further reading
 
 - [`docs/cheatsheet.md`](docs/cheatsheet.md) — quick reference for triggering dispatch, the roster, patterns, and recipes.
