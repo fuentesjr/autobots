@@ -50,18 +50,18 @@ This document is the **normative, buildable contract** for the Autobots package.
 
 `AGT-1` The roster MUST be exactly these ten roles with exactly these attributes:
 
-| Role | Access | `model` alias | `effort` | Underlying model |
+| Role | Access | `model` alias | `effort` | Underlying model (informational, as of 2026-09-02) |
 |---|---|---|---|---|
-| `planner` | read-only | `fable` | `xhigh` | Fable 5 (`claude-fable-5`) |
+| `planner` | read-only | `fable` | `xhigh` | Fable 5.1 (`claude-fable-5-1`) |
 | `coding-worker` | writable | `sonnet` | `high` | Sonnet 5 (`claude-sonnet-5`) |
 | `fast-coding-worker` | writable | `haiku` | *(omitted)* | Haiku 4.5 (`claude-haiku-4-5`) |
 | `helper-worker` | read-only | `haiku` | *(omitted)* | Haiku 4.5 (`claude-haiku-4-5`) |
-| `forensic-analyst` | read-only | `fable` | `xhigh` | Fable 5 (`claude-fable-5`) |
+| `forensic-analyst` | read-only | `fable` | `xhigh` | Fable 5.1 (`claude-fable-5-1`) |
 | `doc-reviewer` | read-only | `sonnet` | `medium` | Sonnet 5 (`claude-sonnet-5`) |
-| `reviewer` | read-only | `opus` | `high` | Opus 4.8 (`claude-opus-4-8`) |
+| `reviewer` | read-only | `opus` | `high` | Opus 5 (`claude-opus-5`) |
 | `qa-engineer` | writable | `sonnet` | `high` | Sonnet 5 (`claude-sonnet-5`) |
-| `edge-case-analyst` | read-only | `opus` | `high` | Opus 4.8 (`claude-opus-4-8`) |
-| `advisor` | read-only | `fable` | `xhigh` | Fable 5 (`claude-fable-5`) |
+| `edge-case-analyst` | read-only | `opus` | `high` | Opus 5 (`claude-opus-5`) |
+| `advisor` | read-only | `fable` | `xhigh` | Fable 5.1 (`claude-fable-5-1`) |
 
 `AGT-2` Model distribution MUST be **3 Fable** (`planner`, `forensic-analyst`, `advisor`) · **2 Opus** (`reviewer`, `edge-case-analyst`) · **3 Sonnet** (`coding-worker`, `doc-reviewer`, `qa-engineer`) · **2 Haiku** (`fast-coding-worker`, `helper-worker`).
 
@@ -171,7 +171,7 @@ tools: Read, Grep, Glob, Bash, WebFetch, WebSearch, Edit, Write, NotebookEdit
 
 ## 8. Advisory Pattern Protocol
 
-`ADV-1` The `advisory` pattern MUST use exactly one writable executor — `coding-worker` (Sonnet, normal work) or `fast-coding-worker` (Haiku, maximum cost reduction) — plus the read-only `advisor` role (Fable 5, `xhigh`).
+`ADV-1` The `advisory` pattern MUST use exactly one writable executor — `coding-worker` (Sonnet, normal work) or `fast-coding-worker` (Haiku, maximum cost reduction) — plus the read-only `advisor` role (Fable, `xhigh`).
 
 `ADV-2` The loop MUST be **parent-mediated**. Executors MUST NOT consult the advisor directly, because the type-restricted `Agent(advisor)` allowlist syntax is ignored when an agent runs as a subagent; granting `Agent` would break the depth-1 invariant (`SKL-4`).
 
