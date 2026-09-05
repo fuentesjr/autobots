@@ -12,19 +12,19 @@ Escape hatches always win over activation. If a user says any of `no subagents`,
 
 ## The roster and model mapping
 
-Every role is pinned to a Claude model family chosen for task fit: Fable for the roles where errors carry the highest downstream cost (planner, forensic-analyst, advisor — all `xhigh`) and, at `low` effort, for `coding-worker`; Opus for high-effort breadth/judgment work (reviewer, edge-case-analyst); and Sonnet for execution-heavy and fast, mechanical work: QA's long tool-call loops and doc-drift's semantic judgment at `high`/`medium` effort (qa-engineer, doc-reviewer), and — at `low` effort — the fast, mechanical roles that formerly ran on Haiku (fast-coding-worker, helper-worker). Distribution across the ten roles: **4 Fable · 2 Opus · 4 Sonnet · 0 Haiku**.
+Every role is pinned to a Claude model family chosen for task fit, with quality first and speed second. Roles whose output gates correctness run on Fable with deep reasoning: `planner`, `forensic-analyst`, `advisor`, and `edge-case-analyst` at `xhigh`, and `reviewer` at `high` (it runs after every change, and `high` keeps its findings precise rather than speculative). Roles that write code run a big model at `low` effort — Fable for `coding-worker`, Opus for `fast-coding-worker` — because higher effort makes implementers produce more code for the same functionality, while a stronger model makes fewer botched edits. Opus at `high` carries the judgment-heavy execution roles: `qa-engineer`'s long tool-call loops and `doc-reviewer`'s semantic drift checks. Sonnet at `low` is reserved for `helper-worker`, where turn speed is the deliverable. Distribution across the ten roles: **6 Fable · 3 Opus · 1 Sonnet · 0 Haiku**.
 
 | Role | Model (alias → resolves to) | Access | Effort |
 |---|---|---|---|
 | `planner` | `fable` → Fable 5.1 | read-only | xhigh |
 | `coding-worker` | `fable` → Fable 5.1 | writable | low |
-| `fast-coding-worker` | `sonnet` → Sonnet 5 | writable | low |
+| `fast-coding-worker` | `opus` → Opus 5 | writable | low |
 | `helper-worker` | `sonnet` → Sonnet 5 | read-only | low |
 | `forensic-analyst` | `fable` → Fable 5.1 | read-only | xhigh |
-| `doc-reviewer` | `sonnet` → Sonnet 5 | read-only | medium |
-| `reviewer` | `opus` → Opus 5 | read-only | high |
-| `qa-engineer` | `sonnet` → Sonnet 5 | writable | high |
-| `edge-case-analyst` | `opus` → Opus 5 | read-only | high |
+| `doc-reviewer` | `opus` → Opus 5 | read-only | high |
+| `reviewer` | `fable` → Fable 5.1 | read-only | high |
+| `qa-engineer` | `opus` → Opus 5 | writable | high |
+| `edge-case-analyst` | `fable` → Fable 5.1 | read-only | xhigh |
 | `advisor` | `fable` → Fable 5.1 | read-only | xhigh |
 
 Each role's `model:` is a family alias (`fable`, `opus`, `sonnet`), not a versioned ID, so a role always runs the newest model Claude Code knows for that family: when a new Fable ships and Claude Code re-points the alias, every Fable role moves with it, with no roster edit. The "resolves to" column is what those aliases mean on Claude Code 2.1.255 or later (before 2.1.255, `fable` meant Fable 5). Two things can make an alias resolve to something else: an older Claude Code build, and an `ANTHROPIC_DEFAULT_FABLE_MODEL`/`_OPUS_MODEL`/`_SONNET_MODEL` environment variable, which redirects the alias outright. The installer warns on both. Every role also sets `effort` explicitly rather than inheriting the session's effort level. No role runs on Haiku.

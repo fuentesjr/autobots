@@ -7,7 +7,7 @@ description: >-
   or fast-coding-worker produces a change, or whenever the user asks for a
   second opinion on a diff before it ships. It is read-only and returns
   findings, not a fixed patch.
-model: opus
+model: fable
 effort: high
 color: green
 tools: Read, Grep, Glob, Bash, WebFetch, WebSearch

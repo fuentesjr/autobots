@@ -6,7 +6,7 @@ description: >-
   executor for autobots dispatch when a task is scoped enough to hand to a
   single worker (often after planner or helper-worker has done
   reconnaissance). Prefer fast-coding-worker instead for small, mechanical,
-  low-risk edits where speed and cost matter more than depth.
+  low-risk edits where speed matters more than depth.
 model: fable
 effort: low
 color: cyan

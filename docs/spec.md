@@ -54,16 +54,16 @@ This document is the **normative, buildable contract** for the Autobots package.
 |---|---|---|---|---|
 | `planner` | read-only | `fable` | `xhigh` | Fable 5.1 |
 | `coding-worker` | writable | `fable` | `low` | Fable 5.1 |
-| `fast-coding-worker` | writable | `sonnet` | `low` | Sonnet 5 |
+| `fast-coding-worker` | writable | `opus` | `low` | Opus 5 |
 | `helper-worker` | read-only | `sonnet` | `low` | Sonnet 5 |
 | `forensic-analyst` | read-only | `fable` | `xhigh` | Fable 5.1 |
-| `doc-reviewer` | read-only | `sonnet` | `medium` | Sonnet 5 |
-| `reviewer` | read-only | `opus` | `high` | Opus 5 |
-| `qa-engineer` | writable | `sonnet` | `high` | Sonnet 5 |
-| `edge-case-analyst` | read-only | `opus` | `high` | Opus 5 |
+| `doc-reviewer` | read-only | `opus` | `high` | Opus 5 |
+| `reviewer` | read-only | `fable` | `high` | Fable 5.1 |
+| `qa-engineer` | writable | `opus` | `high` | Opus 5 |
+| `edge-case-analyst` | read-only | `fable` | `xhigh` | Fable 5.1 |
 | `advisor` | read-only | `fable` | `xhigh` | Fable 5.1 |
 
-`AGT-2` Model distribution MUST be **4 Fable** (`planner`, `forensic-analyst`, `advisor`, `coding-worker`) · **2 Opus** (`reviewer`, `edge-case-analyst`) · **4 Sonnet** (`fast-coding-worker`, `helper-worker`, `doc-reviewer`, `qa-engineer`) · **0 Haiku**.
+`AGT-2` Model distribution MUST be **6 Fable** (`planner`, `coding-worker`, `forensic-analyst`, `reviewer`, `edge-case-analyst`, `advisor`) · **3 Opus** (`fast-coding-worker`, `doc-reviewer`, `qa-engineer`) · **1 Sonnet** (`helper-worker`) · **0 Haiku**.
 
 `AGT-3` Exactly three roles MUST be writable: `coding-worker`, `fast-coding-worker`, `qa-engineer`. All other seven roles MUST be read-only.
 
@@ -171,7 +171,7 @@ tools: Read, Grep, Glob, Bash, WebFetch, WebSearch, Edit, Write, NotebookEdit
 
 ## 8. Advisory Pattern Protocol
 
-`ADV-1` The `advisory` pattern MUST use exactly one writable executor — `coding-worker` (Fable, normal work) or `fast-coding-worker` (Sonnet, maximum cost reduction) — plus the read-only `advisor` role (Fable, `xhigh`).
+`ADV-1` The `advisory` pattern MUST use exactly one writable executor — `coding-worker` (Fable, normal work) or `fast-coding-worker` (Opus, fastest turns) — plus the read-only `advisor` role (Fable, `xhigh`).
 
 `ADV-2` The loop MUST be **parent-mediated**. Executors MUST NOT consult the advisor directly, because the type-restricted `Agent(advisor)` allowlist syntax is ignored when an agent runs as a subagent; granting `Agent` would break the depth-1 invariant (`SKL-4`).
 

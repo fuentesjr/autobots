@@ -16,7 +16,7 @@ Escape hatches always win, even if your request otherwise sounds like an autobot
 |---|---|
 | `planner` | Architecture, decomposition, sequencing, and risk analysis before implementation starts. Read-only — it returns a plan, never edits. |
 | `coding-worker` | Normal-scope implementation: features, bug fixes, refactors. Writable. |
-| `fast-coding-worker` | Small, localized edits and quick fixes where speed/cost matters more than depth. Writable. |
+| `fast-coding-worker` | Small, localized edits and quick fixes where speed matters more than depth. Writable. |
 | `helper-worker` | Fast reconnaissance and evidence-gathering before another role acts — "where is X, what does Y currently do." Read-only. |
 | `forensic-analyst` | Deep root-cause investigation for intermittent, cross-system, or hard-to-reproduce failures. Read-only; returns a forensic report. |
 | `doc-reviewer` | Checking documentation for correctness and drift against the actual code. Read-only. |
@@ -36,7 +36,7 @@ Claude Code resolves a subagent's model in a fixed precedence order: a per-invoc
 Autobots ships two registered patterns:
 
 - **`orchestrator-worker` (default)** — used for any autobots dispatch that doesn't name another pattern. The parent delegates bounded subtasks to whichever of the ten roles fits, gets results back, and synthesizes the final answer itself.
-- **`advisory`** — triggered by `use the advisor strategy`, `advisory pattern`, or an explicit ask for a cheap executor paired with an advisor. It pairs one writable executor (`coding-worker` for normal work, or `fast-coding-worker` for maximum cost reduction) with the read-only `advisor` role.
+- **`advisory`** — triggered by `use the advisor strategy`, `advisory pattern`, or an explicit ask for a cheap executor paired with an advisor. It pairs one writable executor (`coding-worker` for normal work, or `fast-coding-worker` for the fastest turns) with the read-only `advisor` role.
 
 The advisory loop is **parent-mediated**, not peer-to-peer: the executor cannot call `advisor` directly, because the type-restricted `Agent(advisor)` allowlist syntax is ignored once an agent is itself running as a subagent, and granting the executor the `Agent` tool at all would break the one-level-deep delegation invariant every role must respect. So instead:
 
