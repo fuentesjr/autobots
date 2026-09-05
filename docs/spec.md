@@ -50,18 +50,18 @@ This document is the **normative, buildable contract** for the Autobots package.
 
 `AGT-1` The roster MUST be exactly these ten roles with exactly these attributes:
 
-| Role | Access | `model` alias | `effort` | Underlying model |
+| Role | Access | `model` alias | `effort` | Resolves to (Claude Code 2.1.255+) |
 |---|---|---|---|---|
-| `planner` | read-only | `fable` | `xhigh` | Fable 5 (`claude-fable-5`) |
-| `coding-worker` | writable | `fable` | `low` | Fable 5.1 (`claude-fable-5-1`) |
-| `fast-coding-worker` | writable | `sonnet` | `low` | Sonnet 5 (`claude-sonnet-5`) |
-| `helper-worker` | read-only | `sonnet` | `low` | Sonnet 5 (`claude-sonnet-5`) |
-| `forensic-analyst` | read-only | `fable` | `xhigh` | Fable 5 (`claude-fable-5`) |
-| `doc-reviewer` | read-only | `sonnet` | `medium` | Sonnet 5 (`claude-sonnet-5`) |
-| `reviewer` | read-only | `opus` | `high` | Opus 4.8 (`claude-opus-4-8`) |
-| `qa-engineer` | writable | `sonnet` | `high` | Sonnet 5 (`claude-sonnet-5`) |
-| `edge-case-analyst` | read-only | `opus` | `high` | Opus 4.8 (`claude-opus-4-8`) |
-| `advisor` | read-only | `fable` | `xhigh` | Fable 5 (`claude-fable-5`) |
+| `planner` | read-only | `fable` | `xhigh` | Fable 5.1 |
+| `coding-worker` | writable | `fable` | `low` | Fable 5.1 |
+| `fast-coding-worker` | writable | `sonnet` | `low` | Sonnet 5 |
+| `helper-worker` | read-only | `sonnet` | `low` | Sonnet 5 |
+| `forensic-analyst` | read-only | `fable` | `xhigh` | Fable 5.1 |
+| `doc-reviewer` | read-only | `sonnet` | `medium` | Sonnet 5 |
+| `reviewer` | read-only | `opus` | `high` | Opus 5 |
+| `qa-engineer` | writable | `sonnet` | `high` | Sonnet 5 |
+| `edge-case-analyst` | read-only | `opus` | `high` | Opus 5 |
+| `advisor` | read-only | `fable` | `xhigh` | Fable 5.1 |
 
 `AGT-2` Model distribution MUST be **4 Fable** (`planner`, `forensic-analyst`, `advisor`, `coding-worker`) · **2 Opus** (`reviewer`, `edge-case-analyst`) · **4 Sonnet** (`fast-coding-worker`, `helper-worker`, `doc-reviewer`, `qa-engineer`) · **0 Haiku**.
 
@@ -130,7 +130,7 @@ tools: Read, Grep, Glob, Bash, WebFetch, WebSearch, Edit, Write, NotebookEdit
 
 ## 5. Model Routing
 
-`MDL-1` Each role MUST be pinned to the `model` alias in §3 via its frontmatter. Specs MUST use the short alias (`fable`/`opus`/`sonnet`/`haiku`), not a full model ID. **[Deferred]** Pinning full model IDs (e.g. `claude-fable-5`) is the stricter-reproducibility alternative and MAY be adopted later without changing any other part of the contract.
+`MDL-1` Each role MUST be pinned to the `model` family alias in §3 via its frontmatter. Specs MUST use the alias (`fable`/`opus`/`sonnet`/`haiku`), not a full model ID, so that each role runs the newest model Claude Code knows for its family without a roster edit. Any doc that names the concrete model an alias resolves to MUST state the Claude Code version that resolution is true for (§3 states 2.1.255+). Pinning full model IDs remains a rejected alternative: it would freeze the roster on a version.
 
 `MDL-2` The parent MUST spawn each role with the model pinned in its spec and MUST NOT override a role to an unlisted model at dispatch time. Model changes MUST happen by editing the spec plus docs, never ad hoc.
 
@@ -171,7 +171,7 @@ tools: Read, Grep, Glob, Bash, WebFetch, WebSearch, Edit, Write, NotebookEdit
 
 ## 8. Advisory Pattern Protocol
 
-`ADV-1` The `advisory` pattern MUST use exactly one writable executor — `coding-worker` (Fable 5.1, normal work) or `fast-coding-worker` (Sonnet 5, maximum cost reduction) — plus the read-only `advisor` role (Fable 5, `xhigh`).
+`ADV-1` The `advisory` pattern MUST use exactly one writable executor — `coding-worker` (Fable, normal work) or `fast-coding-worker` (Sonnet, maximum cost reduction) — plus the read-only `advisor` role (Fable, `xhigh`).
 
 `ADV-2` The loop MUST be **parent-mediated**. Executors MUST NOT consult the advisor directly, because the type-restricted `Agent(advisor)` allowlist syntax is ignored when an agent runs as a subagent; granting `Agent` would break the depth-1 invariant (`SKL-4`).
 
@@ -258,7 +258,7 @@ The advisor MUST NOT edit files and MUST NOT produce user-facing output.
 
 `INS-5` The installer MUST NOT overwrite existing, differing files unless `--force` is given, and MUST make no writes under `--dry-run`.
 
-`INS-6` The installer MUST warn when `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is set in the environment, because it silently overrides per-role model routing (`MDL-3`).
+`INS-6` The installer MUST warn when `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is set in the environment, because it silently overrides per-role model routing (`MDL-3`). It MUST also warn when any `ANTHROPIC_DEFAULT_FABLE_MODEL`/`ANTHROPIC_DEFAULT_OPUS_MODEL`/`ANTHROPIC_DEFAULT_SONNET_MODEL` variable is set, because it redirects the family alias a role pins (`MDL-1`), and when the installed `claude` is older than 2.1.255, because the aliases resolve to older models there. The version check MUST be skipped silently when `claude` is not on `PATH`.
 
 `INS-7` After install, the installer MUST advise the user to start a new Claude Code session so the agents are picked up (subagent file edits require a session restart unless made via `/agents`; skill edits are picked up live).
 

@@ -12,22 +12,22 @@ Escape hatches always win over activation. If a user says any of `no subagents`,
 
 ## The roster and model mapping
 
-Every role is pinned to a Claude model tier chosen for task fit: Fable 5 for the roles where errors carry the highest downstream cost (planner, forensic-analyst, advisor — all `xhigh`), Fable 5.1 at `low` effort for `coding-worker`, Opus 4.8 for high-effort breadth/judgment work (reviewer, edge-case-analyst), and Sonnet 5 for execution-heavy and fast, mechanical work: QA's long tool-call loops and doc-drift's semantic judgment at `high`/`medium` effort (qa-engineer, doc-reviewer), and — at `low` effort — the fast, mechanical roles that formerly ran on Haiku (fast-coding-worker, helper-worker). Distribution across the ten roles: **4 Fable · 2 Opus · 4 Sonnet · 0 Haiku**.
+Every role is pinned to a Claude model family chosen for task fit: Fable for the roles where errors carry the highest downstream cost (planner, forensic-analyst, advisor — all `xhigh`) and, at `low` effort, for `coding-worker`; Opus for high-effort breadth/judgment work (reviewer, edge-case-analyst); and Sonnet for execution-heavy and fast, mechanical work: QA's long tool-call loops and doc-drift's semantic judgment at `high`/`medium` effort (qa-engineer, doc-reviewer), and — at `low` effort — the fast, mechanical roles that formerly ran on Haiku (fast-coding-worker, helper-worker). Distribution across the ten roles: **4 Fable · 2 Opus · 4 Sonnet · 0 Haiku**.
 
-| Role | Model alias | Underlying model | Access | Effort |
-|---|---|---|---|---|
-| `planner` | `fable` | Fable 5 (`claude-fable-5`) | read-only | xhigh |
-| `coding-worker` | `fable` | Fable 5.1 (`claude-fable-5-1`) | writable | low |
-| `fast-coding-worker` | `sonnet` | Sonnet 5 (`claude-sonnet-5`) | writable | low |
-| `helper-worker` | `sonnet` | Sonnet 5 (`claude-sonnet-5`) | read-only | low |
-| `forensic-analyst` | `fable` | Fable 5 (`claude-fable-5`) | read-only | xhigh |
-| `doc-reviewer` | `sonnet` | Sonnet 5 (`claude-sonnet-5`) | read-only | medium |
-| `reviewer` | `opus` | Opus 4.8 (`claude-opus-4-8`) | read-only | high |
-| `qa-engineer` | `sonnet` | Sonnet 5 (`claude-sonnet-5`) | writable | high |
-| `edge-case-analyst` | `opus` | Opus 4.8 (`claude-opus-4-8`) | read-only | high |
-| `advisor` | `fable` | Fable 5 (`claude-fable-5`) | read-only | xhigh |
+| Role | Model (alias → resolves to) | Access | Effort |
+|---|---|---|---|
+| `planner` | `fable` → Fable 5.1 | read-only | xhigh |
+| `coding-worker` | `fable` → Fable 5.1 | writable | low |
+| `fast-coding-worker` | `sonnet` → Sonnet 5 | writable | low |
+| `helper-worker` | `sonnet` → Sonnet 5 | read-only | low |
+| `forensic-analyst` | `fable` → Fable 5.1 | read-only | xhigh |
+| `doc-reviewer` | `sonnet` → Sonnet 5 | read-only | medium |
+| `reviewer` | `opus` → Opus 5 | read-only | high |
+| `qa-engineer` | `sonnet` → Sonnet 5 | writable | high |
+| `edge-case-analyst` | `opus` → Opus 5 | read-only | high |
+| `advisor` | `fable` → Fable 5.1 | read-only | xhigh |
 
-No role runs on Haiku any more. `doc-reviewer` explicitly sets `medium`, `coding-worker` sets `low`, and `fast-coding-worker`/`helper-worker` also set `low` explicitly, rather than relying on the `high` default that every Fable/Opus/Sonnet role would otherwise fall back to.
+Each role's `model:` is a family alias (`fable`, `opus`, `sonnet`), not a versioned ID, so a role always runs the newest model Claude Code knows for that family: when a new Fable ships and Claude Code re-points the alias, every Fable role moves with it, with no roster edit. The "resolves to" column is what those aliases mean on Claude Code 2.1.255 or later (before 2.1.255, `fable` meant Fable 5). Two things can make an alias resolve to something else: an older Claude Code build, and an `ANTHROPIC_DEFAULT_FABLE_MODEL`/`_OPUS_MODEL`/`_SONNET_MODEL` environment variable, which redirects the alias outright. The installer warns on both. Every role also sets `effort` explicitly rather than inheriting the session's effort level. No role runs on Haiku.
 
 Only three roles are writable — `coding-worker`, `fast-coding-worker`, `qa-engineer` — and can edit files. The other seven are read-only by construction: their `tools:` allowlist withholds `Edit`, `Write`, and `NotebookEdit`. No role is ever granted the `Agent` tool, so no subagent can spawn another subagent — delegation is exactly one level deep, and every result returns to the parent.
 
