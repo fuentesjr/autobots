@@ -53,8 +53,8 @@ This document is the **normative, buildable contract** for the Autobots package.
 | Role | Access | `model` alias | `effort` | Underlying model |
 |---|---|---|---|---|
 | `planner` | read-only | `fable` | `xhigh` | Fable 5 (`claude-fable-5`) |
-| `coding-worker` | writable | `sonnet` | `high` | Sonnet 5 (`claude-sonnet-5`) |
-| `fast-coding-worker` | writable | `haiku` | *(omitted)* | Haiku 4.5 (`claude-haiku-4-5`) |
+| `coding-worker` | writable | `fable` | `low` | Fable 5.1 (`claude-fable-5-1`) |
+| `fast-coding-worker` | writable | `fable` | `low` | Fable 5.1 (`claude-fable-5-1`) |
 | `helper-worker` | read-only | `haiku` | *(omitted)* | Haiku 4.5 (`claude-haiku-4-5`) |
 | `forensic-analyst` | read-only | `fable` | `xhigh` | Fable 5 (`claude-fable-5`) |
 | `doc-reviewer` | read-only | `sonnet` | `medium` | Sonnet 5 (`claude-sonnet-5`) |
@@ -63,7 +63,7 @@ This document is the **normative, buildable contract** for the Autobots package.
 | `edge-case-analyst` | read-only | `opus` | `high` | Opus 4.8 (`claude-opus-4-8`) |
 | `advisor` | read-only | `fable` | `xhigh` | Fable 5 (`claude-fable-5`) |
 
-`AGT-2` Model distribution MUST be **3 Fable** (`planner`, `forensic-analyst`, `advisor`) · **2 Opus** (`reviewer`, `edge-case-analyst`) · **3 Sonnet** (`coding-worker`, `doc-reviewer`, `qa-engineer`) · **2 Haiku** (`fast-coding-worker`, `helper-worker`).
+`AGT-2` Model distribution MUST be **5 Fable** (`planner`, `forensic-analyst`, `advisor`, `coding-worker`, `fast-coding-worker`) · **2 Opus** (`reviewer`, `edge-case-analyst`) · **2 Sonnet** (`doc-reviewer`, `qa-engineer`) · **1 Haiku** (`helper-worker`).
 
 `AGT-3` Exactly three roles MUST be writable: `coding-worker`, `fast-coding-worker`, `qa-engineer`. All other seven roles MUST be read-only.
 
@@ -80,7 +80,7 @@ This document is the **normative, buildable contract** for the Autobots package.
 | `name` | MUST be present, `kebab-case`, and equal to the filename without `.md`. MUST be unique across the roster. |
 | `description` | MUST be present and non-blank. MUST describe when to route to the role and SHOULD include one or more `<example>` trigger blocks that drive automatic delegation. |
 | `model` | MUST be present and MUST be one of `fable`, `opus`, `sonnet`, `haiku`, matching §3 for the role. |
-| `effort` | MUST be present on every Fable/Opus/Sonnet role with the value in §3. MUST be omitted on every Haiku role (`fast-coding-worker`, `helper-worker`). |
+| `effort` | MUST be present on every Fable/Opus/Sonnet role with the value in §3. MUST be omitted on every Haiku role (`helper-worker`). |
 | `tools` | MUST be present and MUST be exactly the access-class list in §4.2. MUST NOT contain `Agent`. MUST NOT contain any todo tool (`TaskCreate`, `TaskGet`, `TaskUpdate`, `TaskList`). |
 | `color` | MAY be present (optional UI color). |
 
@@ -171,7 +171,7 @@ tools: Read, Grep, Glob, Bash, WebFetch, WebSearch, Edit, Write, NotebookEdit
 
 ## 8. Advisory Pattern Protocol
 
-`ADV-1` The `advisory` pattern MUST use exactly one writable executor — `coding-worker` (Sonnet, normal work) or `fast-coding-worker` (Haiku, maximum cost reduction) — plus the read-only `advisor` role (Fable 5, `xhigh`).
+`ADV-1` The `advisory` pattern MUST use exactly one writable executor — `coding-worker` (Fable 5.1, normal work) or `fast-coding-worker` (Fable 5.1, maximum cost reduction) — plus the read-only `advisor` role (Fable 5, `xhigh`).
 
 `ADV-2` The loop MUST be **parent-mediated**. Executors MUST NOT consult the advisor directly, because the type-restricted `Agent(advisor)` allowlist syntax is ignored when an agent runs as a subagent; granting `Agent` would break the depth-1 invariant (`SKL-4`).
 

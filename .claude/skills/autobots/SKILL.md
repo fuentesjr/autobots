@@ -160,8 +160,8 @@ ask for a cheap executor with an advisor. Use this instead of the default
 when the user wants a cost-effective executor that escalates to a stronger
 model only at hard decision points.
 
-**Roles (ADV-1).** Exactly one writable executor — `coding-worker` (Sonnet,
-normal work) or `fast-coding-worker` (Haiku, maximum cost reduction) — plus
+**Roles (ADV-1).** Exactly one writable executor — `coding-worker` (Fable 5.1,
+normal work) or `fast-coding-worker` (Fable 5.1, maximum cost reduction) — plus
 the read-only `advisor` (Fable 5, `xhigh`).
 
 **The loop is parent-mediated (ADV-2).** Executors must never consult the

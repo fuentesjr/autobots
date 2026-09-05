@@ -810,8 +810,8 @@ type rosterEntry struct {
 // same commit.
 var expectedRoster = map[string]rosterEntry{
 	"planner":            {model: "fable", effort: "xhigh", writable: false},
-	"coding-worker":      {model: "sonnet", effort: "high", writable: true},
-	"fast-coding-worker": {model: "haiku", effort: "", writable: true},
+	"coding-worker":      {model: "fable", effort: "low", writable: true},
+	"fast-coding-worker": {model: "fable", effort: "low", writable: true},
 	"helper-worker":      {model: "haiku", effort: "", writable: false},
 	"forensic-analyst":   {model: "fable", effort: "xhigh", writable: false},
 	"doc-reviewer":       {model: "sonnet", effort: "medium", writable: false},
