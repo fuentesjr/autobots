@@ -161,7 +161,7 @@ when the user wants a cost-effective executor that escalates to a stronger
 model only at hard decision points.
 
 **Roles (ADV-1).** Exactly one writable executor — `coding-worker` (Fable 5.1,
-normal work) or `fast-coding-worker` (Fable 5.1, maximum cost reduction) — plus
+normal work) or `fast-coding-worker` (Sonnet 5, maximum cost reduction) — plus
 the read-only `advisor` (Fable 5, `xhigh`).
 
 **The loop is parent-mediated (ADV-2).** Executors must never consult the
