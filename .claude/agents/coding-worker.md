@@ -7,8 +7,8 @@ description: >-
   single worker (often after planner or helper-worker has done
   reconnaissance). Prefer fast-coding-worker instead for small, mechanical,
   low-risk edits where speed and cost matter more than depth.
-model: sonnet
-effort: high
+model: fable
+effort: low
 color: cyan
 tools: Read, Grep, Glob, Bash, WebFetch, WebSearch, Edit, Write, NotebookEdit
 ---
