@@ -95,9 +95,9 @@ Every subagent above is spawned via the `Agent` tool with `subagent_type: <name>
 matching its `.claude/agents/<name>.md` file. Each role is pinned to its own
 model and effort in its spec — do not override a role's model at dispatch
 time; model changes happen by editing the agent spec, never ad hoc. Per-role
-model routing only holds when `CLAUDE_CODE_SUBAGENT_MODEL` is **unset** — if
-it's set in the environment, every role collapses onto that one model
-regardless of its spec, so check for it if routing looks wrong.
+model routing only holds when `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is **unset** —
+if it's set in the environment, Claude Code ignores every role's `model:` and
+collapses the roster onto one model, so check for it if routing looks wrong.
 
 ## Pattern registry
 

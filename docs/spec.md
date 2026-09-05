@@ -39,7 +39,7 @@ This document is the **normative, buildable contract** for the Autobots package.
 | `docs/spec.md` | This document | `VAL-14` (§3 roster table) |
 | `docs/faq.md` | User FAQ | `VAL-7`, `VAL-12` |
 | `docs/cheatsheet.md` | Usage cheatsheet | `VAL-7`, `VAL-8`, `VAL-10`, `VAL-12` |
-| `README.md` | Overview + model mapping + `CLAUDE_CODE_SUBAGENT_MODEL` caveat | `VAL-7`, `VAL-8`, `VAL-12`, `MDL-3` |
+| `README.md` | Overview + model mapping + `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` caveat | `VAL-7`, `VAL-8`, `VAL-12`, `MDL-3` |
 | `.github/workflows/validate.yml` | CI running the acceptance commands (§11) | `ACC-4` |
 
 `ART-3` There MUST be exactly ten agent files under `.claude/agents/`, one per role in §3. The installer, `SKILL.md`, `README.md`, `docs/design.md`, `docs/faq.md`, and `docs/cheatsheet.md` MUST reference the same ten role names (enforced by `VAL-7`, `VAL-9`, `VAL-11`, `VAL-14`).
@@ -134,7 +134,7 @@ tools: Read, Grep, Glob, Bash, WebFetch, WebSearch, Edit, Write, NotebookEdit
 
 `MDL-2` The parent MUST spawn each role with the model pinned in its spec and MUST NOT override a role to an unlisted model at dispatch time. Model changes MUST happen by editing the spec plus docs, never ad hoc.
 
-`MDL-3` The per-role model contract holds only when the `CLAUDE_CODE_SUBAGENT_MODEL` environment variable is **unset**. The package MUST document that per-role routing requires this variable to be unset, because Claude Code resolves it ahead of frontmatter `model:` and would collapse the whole roster onto one model. `README.md` MUST surface this caveat, and the installer MUST warn when the variable is set (`INS-6`).
+`MDL-3` The per-role model contract holds only when the `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` environment variable is **unset**. The package MUST document that per-role routing requires this variable to be unset, because while it is set Claude Code ignores every subagent definition's frontmatter `model:` and would collapse the whole roster onto one model. `CLAUDE_CODE_SUBAGENT_MODEL` alone is only a default for subagents that declare no model and does not override frontmatter (Claude Code v2.1.251+; before that it did, and the documentation MUST note it). `README.md` MUST surface this caveat, and the installer MUST warn when the variable is set (`INS-6`).
 
 ## 6. Dispatch and Orchestration
 
@@ -258,7 +258,7 @@ The advisor MUST NOT edit files and MUST NOT produce user-facing output.
 
 `INS-5` The installer MUST NOT overwrite existing, differing files unless `--force` is given, and MUST make no writes under `--dry-run`.
 
-`INS-6` The installer MUST warn when `CLAUDE_CODE_SUBAGENT_MODEL` is set in the environment, because it silently overrides per-role model routing (`MDL-3`).
+`INS-6` The installer MUST warn when `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is set in the environment, because it silently overrides per-role model routing (`MDL-3`).
 
 `INS-7` After install, the installer MUST advise the user to start a new Claude Code session so the agents are picked up (subagent file edits require a session restart unless made via `/agents`; skill edits are picked up live).
 

@@ -64,16 +64,18 @@ Distribution: **4 Fable · 2 Opus · 4 Sonnet · 0 Haiku** (ten roles; `advisor`
 
 Specs use the short alias (`fable`/`opus`/`sonnet`/`haiku`) in the `model:` field — this matches the idiom of every real Claude Code agent on disk and lets a role float to Claude Code's current best model for that tier. The exact underlying model is documented here and in `README.md`. Pinning full model IDs (e.g. `claude-fable-5`) is the stricter-reproducibility alternative; it can be adopted later without changing any other part of the contract.
 
-### Model-routing caveat: `CLAUDE_CODE_SUBAGENT_MODEL`
+### Model-routing caveat: `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`
 
 Claude Code resolves a subagent's model in this order (first match wins):
 
-1. `CLAUDE_CODE_SUBAGENT_MODEL` environment variable
-2. per-invocation `model` parameter set by the delegating agent
-3. the subagent frontmatter `model:`
+1. per-invocation `model` parameter set by the delegating agent
+2. the subagent frontmatter `model:`
+3. `CLAUDE_CODE_SUBAGENT_MODEL` environment variable
 4. the main conversation's model
 
-**Consequence:** if `CLAUDE_CODE_SUBAGENT_MODEL` is set, it overrides the frontmatter `model:` that Autobots ships, collapsing the whole roster onto one model. This is not a hypothetical edge case: it is easy to have this variable set globally — in `~/.claude/settings.json` or the shell environment (for example, to `"sonnet"`) for unrelated reasons — and forget it is there, in which case every Autobots role would run as that one model regardless of its spec. The package must document that per-role model routing requires `CLAUDE_CODE_SUBAGENT_MODEL` to be **unset**, and the installer/README should surface this prominently (the installer can detect the env var and warn).
+Autobots pins every role at step 2, so `CLAUDE_CODE_SUBAGENT_MODEL` by itself is only a default for subagents that declare no model and does not affect the roster. `CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1` (Claude Code v2.1.257+) is the override: while it is set, Claude Code ignores the `model:` field of every subagent definition and runs them all on `CLAUDE_CODE_SUBAGENT_MODEL`, or on the main conversation's model when that is unset.
+
+**Consequence:** if `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is set, it overrides the frontmatter `model:` that Autobots ships, collapsing the whole roster onto one model. This is not a hypothetical edge case: it is easy to have this variable set globally — in `~/.claude/settings.json` or the shell environment — for unrelated reasons and forget it is there, in which case every Autobots role would run as one model regardless of its spec. The package must document that per-role model routing requires `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` to be **unset**, and the installer/README should surface this prominently (the installer can detect the env var and warn). Before v2.1.251, `CLAUDE_CODE_SUBAGENT_MODEL` itself came first in the resolution order; users on those versions must unset it as well.
 
 ## Agent Roles
 
@@ -178,7 +180,7 @@ Escape hatches take precedence. If the user says `no subagents`, `do not use sub
 
 Pattern selection is part of dispatch. Delegation uses the default `orchestrator-worker` pattern unless the user names another registered pattern by its triggers (see the registry in Multi-Agent Patterns). A request for an unregistered pattern falls back to the default, with a note to the user.
 
-Model routing is part of the package contract. The parent must spawn each role with the model pinned in its `.claude/agents/<name>.md` spec and documented in the Model Mapping table; it must not override a role to an unlisted model at dispatch time. Model changes happen by editing the spec and docs, never ad hoc. (This contract holds only when `CLAUDE_CODE_SUBAGENT_MODEL` is unset — see the Model-routing caveat.)
+Model routing is part of the package contract. The parent must spawn each role with the model pinned in its `.claude/agents/<name>.md` spec and documented in the Model Mapping table; it must not override a role to an unlisted model at dispatch time. Model changes happen by editing the spec and docs, never ad hoc. (This contract holds only when `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is unset — see the Model-routing caveat.)
 
 Fixing one model per role also keeps each subagent cache-coherent by construction: a role never switches models mid-task, so its prompt-prefix cache is never invalidated by a routing change. Dynamic auto-routers add cache-aware machinery to recover this property; a fixed roster has it for free.
 
@@ -317,7 +319,7 @@ Only the destination paths change:
 | Skill | `.claude/skills/autobots/SKILL.md` | `~/.claude/skills/autobots/SKILL.md` |
 | Agents | `.claude/agents/<name>.md` | `~/.claude/agents/<name>.md` |
 
-The script works from a local checkout and through a raw GitHub pipe, where it downloads `SKILL.md` and `.claude/agents/*.md` from the selected ref. It should additionally warn when `CLAUDE_CODE_SUBAGENT_MODEL` is set in the environment, since that silently overrides the per-role model routing (see the Model-routing caveat). After install it advises the user to start a new Claude Code session so the skill and agents are picked up (subagent file edits require a session restart unless made via `/agents`; skill edits are picked up live).
+The script works from a local checkout and through a raw GitHub pipe, where it downloads `SKILL.md` and `.claude/agents/*.md` from the selected ref. It should additionally warn when `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is set in the environment, since that silently overrides the per-role model routing (see the Model-routing caveat). After install it advises the user to start a new Claude Code session so the skill and agents are picked up (subagent file edits require a session restart unless made via `/agents`; skill edits are picked up live).
 
 ### `--symlink`: live-source installs
 
@@ -334,7 +336,7 @@ Codex caps fan-out with `[agents] max_threads` / `max_depth` in `config.toml`. C
 - **Depth** is enforced by capability, not a number: because no Autobots role is granted the `Agent` tool, no role can spawn a nested subagent, so delegation is exactly one level deep. This replaces `max_depth = 1`.
 - **Breadth** is controlled by the parent's fan-out discipline — how many subagents it spawns for a task — and by Claude Code's internal cap on concurrently running subagents.
 
-Project-level knobs — `Bash` deny rules for hard read-only enforcement, permission `allow`/`deny` rules, and the `CLAUDE_CODE_SUBAGENT_MODEL` caveat — live in `.claude/settings.json` and the environment rather than a package config file.
+Project-level knobs — `Bash` deny rules for hard read-only enforcement, permission `allow`/`deny` rules, and the `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` caveat — live in `.claude/settings.json` and the environment rather than a package config file.
 
 ## Change Policy
 
@@ -350,7 +352,7 @@ Patterns are part of the delegation contract as well. Adding or changing a patte
 2. **Spec format**: `.codex/agents/*.toml` → `.claude/agents/*.md` (YAML frontmatter + Markdown body).
 3. **Skill path**: `.agents/skills/agenticons/` → `.claude/skills/autobots/`; the dispatcher is also the `/autobots` slash command.
 4. **Names**: `snake_case` → `kebab-case`.
-5. **Models**: GPT tiers → Claude tiers, task-fit (4 Fable · 2 Opus · 4 Sonnet · 0 Haiku, with the model tier tracking each role's work shape and reasoning effort). Subject to the `CLAUDE_CODE_SUBAGENT_MODEL` override caveat.
+5. **Models**: GPT tiers → Claude tiers, task-fit (4 Fable · 2 Opus · 4 Sonnet · 0 Haiku, with the model tier tracking each role's work shape and reasoning effort). Subject to the `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` override caveat.
 6. **Reasoning effort**: `model_reasoning_effort` field → Claude Code's per-subagent `effort:` field (near 1:1), omitted on Haiku roles because Haiku ignores it (none currently in the roster). Effort assignments were tuned for the Claude model family rather than ported 1:1 from Agenticons.
 7. **Access control**: `sandbox_mode` field → `tools` allowlist (writable iff `Edit`/`Write` present). Shell-level write prevention needs a `PreToolUse` hook, which is why Autobots ships file-based rather than as a plugin.
 8. **No nested delegation**: `max_depth = 1` → omit the `Agent` tool from every role.

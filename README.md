@@ -31,25 +31,25 @@ No role runs on Haiku any more. `doc-reviewer` explicitly sets `medium`, `coding
 
 Only three roles are writable — `coding-worker`, `fast-coding-worker`, `qa-engineer` — and can edit files. The other seven are read-only by construction: their `tools:` allowlist withholds `Edit`, `Write`, and `NotebookEdit`. No role is ever granted the `Agent` tool, so no subagent can spawn another subagent — delegation is exactly one level deep, and every result returns to the parent.
 
-## Caveat: `CLAUDE_CODE_SUBAGENT_MODEL` must be unset
+## Caveat: `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` must be unset
 
 Claude Code resolves a subagent's model in this order, first match wins:
 
-1. `CLAUDE_CODE_SUBAGENT_MODEL` environment variable
-2. a per-invocation `model` parameter set by the delegating agent
-3. the subagent's frontmatter `model:`
+1. a per-invocation `model` parameter set by the delegating agent
+2. the subagent's frontmatter `model:`
+3. the `CLAUDE_CODE_SUBAGENT_MODEL` environment variable
 4. the main conversation's model
 
-**If `CLAUDE_CODE_SUBAGENT_MODEL` is set, it overrides every role's frontmatter `model:` and collapses the entire ten-role roster onto a single model.** The per-role routing table above — the whole point of Autobots — holds only when this variable is **unset**. This is not a hypothetical edge case: it is easy to have this variable set globally in `~/.claude/settings.json` (for example, to `"sonnet"`) for unrelated reasons and forget it is there.
+Autobots pins every role at step 2, so `CLAUDE_CODE_SUBAGENT_MODEL` on its own does not touch the roster — it is only a default for subagents that declare no model. **`CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1` is different: it makes Claude Code ignore the `model:` field of every subagent definition and run them all on `CLAUDE_CODE_SUBAGENT_MODEL` (or on the main conversation's model when that is unset), collapsing the entire ten-role roster onto a single model.** The per-role routing table above — the whole point of Autobots — holds only when `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is **unset**. It is easy to have it set globally in `~/.claude/settings.json` for unrelated reasons and forget it is there.
 
 Before relying on Autobots' model-tier routing:
 
 ```bash
-echo "$CLAUDE_CODE_SUBAGENT_MODEL"   # should print nothing
-unset CLAUDE_CODE_SUBAGENT_MODEL
+echo "$CLAUDE_CODE_SUBAGENT_MODEL_FORCE"   # should print nothing
+unset CLAUDE_CODE_SUBAGENT_MODEL_FORCE
 ```
 
-`scripts/install.sh` checks for this variable at install time and warns if it is set, but it cannot unset a variable in your shell for you — you must unset it (or remove it from wherever it's exported) yourself.
+`scripts/install.sh` checks for this variable at install time and warns if it is set, but it cannot unset a variable in your shell for you — you must unset it (or remove it from wherever it's exported) yourself. Before Claude Code v2.1.251, `CLAUDE_CODE_SUBAGENT_MODEL` itself came first in the order above and overrode frontmatter; on those versions, unset it too.
 
 ## Install
 

@@ -195,14 +195,15 @@ if [ "$GLOBAL" -eq 1 ] && [ -n "$TARGET_REPO" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# INS-6: warn loudly if CLAUDE_CODE_SUBAGENT_MODEL is set, since it silently
-# collapses per-role model routing onto a single model.
+# INS-6: warn loudly if CLAUDE_CODE_SUBAGENT_MODEL_FORCE is set, since it
+# makes Claude Code ignore every subagent's 'model:' frontmatter and collapses
+# per-role model routing onto a single model.
 # ---------------------------------------------------------------------------
-if [ -n "${CLAUDE_CODE_SUBAGENT_MODEL:-}" ]; then
-  warn "CLAUDE_CODE_SUBAGENT_MODEL is set to '${CLAUDE_CODE_SUBAGENT_MODEL}'."
-  warn "This silently overrides the per-role 'model:' frontmatter that Autobots ships,"
-  warn "collapsing the entire agent roster onto a single model. Unset it if you want"
-  warn "each Autobots role to run the model its spec declares."
+if [ -n "${CLAUDE_CODE_SUBAGENT_MODEL_FORCE:-}" ]; then
+  warn "CLAUDE_CODE_SUBAGENT_MODEL_FORCE is set to '${CLAUDE_CODE_SUBAGENT_MODEL_FORCE}'."
+  warn "This makes Claude Code ignore the per-role 'model:' frontmatter that Autobots"
+  warn "ships, collapsing the entire agent roster onto a single model. Unset it if you"
+  warn "want each Autobots role to run the model its spec declares."
 fi
 
 # ---------------------------------------------------------------------------
