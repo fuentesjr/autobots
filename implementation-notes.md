@@ -277,3 +277,42 @@ scope: `.gitignore` (extra `.trk/lock` line), `.gitattributes`, and `.trk/` are 
 untracked in this working tree with `Jul 20` mtimes — predates this task's session entirely
 (confirmed via `stat`), not touched by this change, flagged here only so it isn't mistaken for
 something this task did.
+
+## Task 3 — roster review: alias hardening + retune (quality first, speed second, cost ignored)
+
+Three commits on `claude/roles-subagents-models-review-umuvbl`:
+
+1. **Env-var caveat correction.** Claude Code v2.1.251+ resolves frontmatter `model:` ahead of
+   `CLAUDE_CODE_SUBAGENT_MODEL`; the roster-collapsing override is now
+   `CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1` (v2.1.257+). Verified against code.claude.com sub-agents
+   and model-config docs. README/design/spec/faq/cheatsheet/SKILL rewritten; installer INS-6 warns
+   on the FORCE variable. Pre-2.1.251 behavior noted for old clients. `scripts/fork-diff.sh` still
+   maps `CLAUDE_CODE_SUBAGENT_MODEL` for the Optimites diff — untouched; that is a name-mapping
+   rule, not a caveat.
+2. **Alias hardening.** Considered pinning full IDs (`claude-fable-5-1` etc.) and rejected it:
+   the user's goal is "always the newest model", which is exactly what the family alias gives
+   once Claude Code is updated. Kept aliases; fixed the drift (docs said Fable 5 / Opus 4.8 —
+   `fable` → Fable 5.1 since v2.1.255, `opus` → Opus 5) by showing "resolves to (Claude Code
+   2.1.255+)" beside each alias; MDL-1 now requires any concrete model name to carry the Claude
+   Code version it is true for. Installer warns on `ANTHROPIC_DEFAULT_{FABLE,OPUS,SONNET}_MODEL`
+   (redirects an alias) and on `claude` < 2.1.255 (POSIX `sort -t. -kN,Nn` compare; silent when
+   `claude` is not on PATH). Also fixed the effort-default note: omitted `effort` inherits the
+   session level, not a fixed `high`. Validator unchanged.
+3. **Retune.** Rules: readers/analysts on Fable deep (`xhigh`; `reviewer` at `high` because it
+   runs per change and effort in review trades precision for recall); implementers on a big model
+   at `low` (higher effort produces more code for the same functionality); Sonnet only where turn
+   speed is the deliverable. Moves: `fast-coding-worker` sonnet→opus (`low`), `doc-reviewer`
+   sonnet medium→opus high, `reviewer` opus→fable (`high`), `qa-engineer` sonnet→opus (`high`),
+   `edge-case-analyst` opus high→fable xhigh. Distribution 6 Fable · 3 Opus · 1 Sonnet.
+   `coding-worker`/`fast-coding-worker` descriptions and ADV-1 text no longer route on cost; the
+   advisory trigger phrase "cheap executor" is kept — it is a user-facing trigger, not rationale.
+
+Tables in README/design/spec/cheatsheet, agent frontmatter, and the validator's `expectedRoster`
+were regenerated from one roster definition (scratch script, not committed) so they cannot disagree.
+
+**Verification:** `gofmt -l`, `go vet ./...`, `go test ./...`, and
+`go run ./scripts/validate_package.go` (13 checks) pass after each commit; `bash -n` on the
+installer; installer warnings exercised with `--dry-run` against a scratch target using a fake
+`claude` reporting 2.1.200 plus `ANTHROPIC_DEFAULT_FABLE_MODEL` set (both fired), and with the
+real 2.1.261 (silent). Not run: `scripts/routing_gate.py` (needs an API key; the only SKILL.md
+routing-relevant text change is the ADV-1 role parenthetical, which no scenario keys on).

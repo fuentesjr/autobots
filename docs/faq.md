@@ -16,7 +16,7 @@ Escape hatches always win, even if your request otherwise sounds like an autobot
 |---|---|
 | `planner` | Architecture, decomposition, sequencing, and risk analysis before implementation starts. Read-only — it returns a plan, never edits. |
 | `coding-worker` | Normal-scope implementation: features, bug fixes, refactors. Writable. |
-| `fast-coding-worker` | Small, localized edits and quick fixes where speed/cost matters more than depth. Writable. |
+| `fast-coding-worker` | Small, localized edits and quick fixes where speed matters more than depth. Writable. |
 | `helper-worker` | Fast reconnaissance and evidence-gathering before another role acts — "where is X, what does Y currently do." Read-only. |
 | `forensic-analyst` | Deep root-cause investigation for intermittent, cross-system, or hard-to-reproduce failures. Read-only; returns a forensic report. |
 | `doc-reviewer` | Checking documentation for correctness and drift against the actual code. Read-only. |
@@ -27,16 +27,16 @@ Escape hatches always win, even if your request otherwise sounds like an autobot
 
 A typical flow chains a few of these: `planner` → `coding-worker` → `reviewer` is the default plan/implement/review recipe. `helper-worker` often runs first when the parent needs facts before deciding scope.
 
-## Why is per-role model routing broken if `CLAUDE_CODE_SUBAGENT_MODEL` is set?
+## Why is per-role model routing broken if `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is set?
 
-Claude Code resolves a subagent's model in a fixed precedence order, and the `CLAUDE_CODE_SUBAGENT_MODEL` environment variable wins if it's set — ahead of the frontmatter `model:` field that pins each Autobots role to its intended tier. With the variable set, every role — `planner`, `coding-worker`, `fast-coding-worker`, `helper-worker`, `forensic-analyst`, `doc-reviewer`, `reviewer`, `qa-engineer`, `edge-case-analyst`, and `advisor` alike — silently collapses onto whatever single model the variable names, regardless of what its `.md` spec says. There is no error or warning at dispatch time; the roster just quietly stops being a roster. `scripts/install.sh` checks for this variable and warns if it's set, and `README.md` documents the fix: unset it before relying on per-role routing.
+Claude Code resolves a subagent's model in a fixed precedence order: a per-invocation `model` parameter, then the frontmatter `model:` field that pins each Autobots role to its intended tier, then the `CLAUDE_CODE_SUBAGENT_MODEL` environment variable, then the main conversation's model. Because every Autobots role pins its model in frontmatter, `CLAUDE_CODE_SUBAGENT_MODEL` by itself is harmless — it only fills in for subagents that declare no model. `CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1` is the problem: while it is set, Claude Code ignores the `model:` field of every subagent definition, so every role — `planner`, `coding-worker`, `fast-coding-worker`, `helper-worker`, `forensic-analyst`, `doc-reviewer`, `reviewer`, `qa-engineer`, `edge-case-analyst`, and `advisor` alike — silently collapses onto whatever single model `CLAUDE_CODE_SUBAGENT_MODEL` names (or the main conversation's model), regardless of what its `.md` spec says. There is no error at dispatch time; the roster just quietly stops being a roster. `scripts/install.sh` checks for this variable and warns if it's set, and `README.md` documents the fix: unset it before relying on per-role routing. On Claude Code older than v2.1.251, `CLAUDE_CODE_SUBAGENT_MODEL` itself overrode frontmatter, so unset that too if you are on an old version.
 
 ## What patterns exist? How does the advisory consult loop work?
 
 Autobots ships two registered patterns:
 
 - **`orchestrator-worker` (default)** — used for any autobots dispatch that doesn't name another pattern. The parent delegates bounded subtasks to whichever of the ten roles fits, gets results back, and synthesizes the final answer itself.
-- **`advisory`** — triggered by `use the advisor strategy`, `advisory pattern`, or an explicit ask for a cheap executor paired with an advisor. It pairs one writable executor (`coding-worker` for normal work, or `fast-coding-worker` for maximum cost reduction) with the read-only `advisor` role.
+- **`advisory`** — triggered by `use the advisor strategy`, `advisory pattern`, or an explicit ask for a cheap executor paired with an advisor. It pairs one writable executor (`coding-worker` for normal work, or `fast-coding-worker` for the fastest turns) with the read-only `advisor` role.
 
 The advisory loop is **parent-mediated**, not peer-to-peer: the executor cannot call `advisor` directly, because the type-restricted `Agent(advisor)` allowlist syntax is ignored once an agent is itself running as a subagent, and granting the executor the `Agent` tool at all would break the one-level-deep delegation invariant every role must respect. So instead:
 

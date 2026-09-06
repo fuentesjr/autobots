@@ -7,8 +7,8 @@ description: >-
   touches documented behavior, or when a user asks whether docs are still
   accurate. It is read-only and reports findings; it does not fix the docs
   itself.
-model: sonnet
-effort: medium
+model: opus
+effort: high
 color: teal
 tools: Read, Grep, Glob, Bash, WebFetch, WebSearch
 ---

@@ -95,9 +95,9 @@ Every subagent above is spawned via the `Agent` tool with `subagent_type: <name>
 matching its `.claude/agents/<name>.md` file. Each role is pinned to its own
 model and effort in its spec — do not override a role's model at dispatch
 time; model changes happen by editing the agent spec, never ad hoc. Per-role
-model routing only holds when `CLAUDE_CODE_SUBAGENT_MODEL` is **unset** — if
-it's set in the environment, every role collapses onto that one model
-regardless of its spec, so check for it if routing looks wrong.
+model routing only holds when `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is **unset** —
+if it's set in the environment, Claude Code ignores every role's `model:` and
+collapses the roster onto one model, so check for it if routing looks wrong.
 
 ## Pattern registry
 
@@ -160,9 +160,9 @@ ask for a cheap executor with an advisor. Use this instead of the default
 when the user wants a cost-effective executor that escalates to a stronger
 model only at hard decision points.
 
-**Roles (ADV-1).** Exactly one writable executor — `coding-worker` (Fable 5.1,
-normal work) or `fast-coding-worker` (Sonnet 5, maximum cost reduction) — plus
-the read-only `advisor` (Fable 5, `xhigh`).
+**Roles (ADV-1).** Exactly one writable executor — `coding-worker` (Fable,
+normal work) or `fast-coding-worker` (Opus, fastest turns) — plus
+the read-only `advisor` (Fable, `xhigh`).
 
 **The loop is parent-mediated (ADV-2).** Executors must never consult the
 advisor directly — they have no `Agent` tool, so a direct consult is

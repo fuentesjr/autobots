@@ -7,8 +7,8 @@ description: >-
   with proposed expected behavior and concrete test cases — it does not
   write the tests or the fix itself. Route confirmed cases to coding-worker
   or fast-coding-worker afterward.
-model: opus
-effort: high
+model: fable
+effort: xhigh
 color: magenta
 tools: Read, Grep, Glob, Bash, WebFetch, WebSearch
 ---

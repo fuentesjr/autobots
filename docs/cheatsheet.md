@@ -31,20 +31,20 @@ ask for delegation explicitly.
 
 ## The roster (ten roles)
 
-Distribution: **4 Fable · 2 Opus · 4 Sonnet · 0 Haiku**.
+Distribution: **6 Fable · 3 Opus · 1 Sonnet · 0 Haiku**.
 
 | Role | Model | Effort | Access | Reach for it when… |
 |---|---|---|---|---|
-| `planner` | Fable 5 | xhigh | read-only | you need architecture, decomposition, sequencing, risk analysis before code |
+| `planner` | Fable 5.1 | xhigh | read-only | you need architecture, decomposition, sequencing, risk analysis before code |
 | `coding-worker` | Fable 5.1 | low | **writable** | normal-scope implementation, bug fixes, refactors |
-| `fast-coding-worker` | Sonnet 5 | low | **writable** | small, localized, low-risk edits / quick fixes |
+| `fast-coding-worker` | Opus 5 | low | **writable** | small, localized, low-risk edits / quick fixes |
 | `helper-worker` | Sonnet 5 | low | read-only | quick lookup, repo recon, evidence gathering before editing |
-| `forensic-analyst` | Fable 5 | xhigh | read-only | deep root-cause on hard/intermittent/cross-system bugs |
-| `doc-reviewer` | Sonnet 5 | medium | read-only | documentation correctness / drift review |
-| `reviewer` | Opus 4.8 | high | read-only | correctness, security, maintainability, regression review |
-| `qa-engineer` | Sonnet 5 | high | **writable** | exercise a change end-to-end (regressions, perf, UX rough edges) |
-| `edge-case-analyst` | Opus 4.8 | high | read-only | find uncovered cases + propose specs and concrete test cases |
-| `advisor` | Fable 5 | xhigh | read-only | guidance-only consultant for the advisory pattern (plan / correction / stop) |
+| `forensic-analyst` | Fable 5.1 | xhigh | read-only | deep root-cause on hard/intermittent/cross-system bugs |
+| `doc-reviewer` | Opus 5 | high | read-only | documentation correctness / drift review |
+| `reviewer` | Fable 5.1 | high | read-only | correctness, security, maintainability, regression review |
+| `qa-engineer` | Opus 5 | high | **writable** | exercise a change end-to-end (regressions, perf, UX rough edges) |
+| `edge-case-analyst` | Fable 5.1 | xhigh | read-only | find uncovered cases + propose specs and concrete test cases |
+| `advisor` | Fable 5.1 | xhigh | read-only | guidance-only consultant for the advisory pattern (plan / correction / stop) |
 
 Only the three **writable** roles can edit files. The other seven are read-only
 (they can still run read-only shell inspection). No role can spawn another
@@ -90,13 +90,15 @@ An unregistered pattern falls back to the default (with a note).
 
 ## Model routing gotcha
 
-Per-role model routing only works when the `CLAUDE_CODE_SUBAGENT_MODEL`
-environment variable is **unset**. If it's set, Claude Code resolves it ahead of
-each role's frontmatter `model:` and collapses the whole roster onto one model.
+Per-role model routing only works when the `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`
+environment variable is **unset**. If it's set, Claude Code ignores each role's
+frontmatter `model:` and collapses the whole roster onto one model.
+(`CLAUDE_CODE_SUBAGENT_MODEL` alone is only a default for subagents with no
+pinned model — it does not override Autobots roles on Claude Code v2.1.251+.)
 
 ```bash
 # check it's not set:
-printenv CLAUDE_CODE_SUBAGENT_MODEL   # should print nothing
+printenv CLAUDE_CODE_SUBAGENT_MODEL_FORCE   # should print nothing
 ```
 
 Also check `~/.claude/settings.json` for an `env` block setting it. The installer
