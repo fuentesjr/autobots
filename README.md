@@ -12,22 +12,22 @@ Escape hatches always win over activation. If a user says any of `no subagents`,
 
 ## The roster and model mapping
 
-Every role is pinned to a Claude model tier chosen for task fit: Fable for the roles where errors carry the highest downstream cost (planner, forensic-analyst, advisor — all `xhigh`), Opus for high-effort breadth/judgment work (reviewer, edge-case-analyst), Sonnet for execution-heavy work (standard implementation, QA's long tool-call loops, doc-drift's semantic judgment), and Haiku for fast, mechanical work. Distribution across the ten roles: **3 Fable · 2 Opus · 3 Sonnet · 2 Haiku**.
+Every role is pinned to a Claude model tier chosen for task fit: Fable for the roles where errors carry the highest downstream cost (planner, forensic-analyst, advisor — all `xhigh`), Opus for breadth/judgment work at `high` (reviewer, edge-case-analyst) and execution-heavy work at `medium` (standard implementation, QA's long tool-call loops) and Sonnet for doc-drift's semantic judgment plus, at `low`, fast mechanical work (small edits, quick lookups). Distribution across the ten roles: **3 Fable · 4 Opus · 3 Sonnet**.
 
-| Role | Model alias | Underlying model (as of 2026-09-02) | Access | Effort |
+| Role | Model alias | Underlying model (as of 2026-09-22) | Access | Effort |
 |---|---|---|---|---|
 | `planner` | `fable` | Fable 5.1 (`claude-fable-5-1`) | read-only | xhigh |
-| `coding-worker` | `sonnet` | Sonnet 5 (`claude-sonnet-5`) | writable | high |
-| `fast-coding-worker` | `haiku` | Haiku 4.5 (`claude-haiku-4-5`) | writable | — |
-| `helper-worker` | `haiku` | Haiku 4.5 (`claude-haiku-4-5`) | read-only | — |
+| `coding-worker` | `opus` | Opus 5.5 (`claude-opus-5-5`) | writable | medium |
+| `fast-coding-worker` | `sonnet` | Sonnet 5 (`claude-sonnet-5`) | writable | low |
+| `helper-worker` | `sonnet` | Sonnet 5 (`claude-sonnet-5`) | read-only | low |
 | `forensic-analyst` | `fable` | Fable 5.1 (`claude-fable-5-1`) | read-only | xhigh |
 | `doc-reviewer` | `sonnet` | Sonnet 5 (`claude-sonnet-5`) | read-only | medium |
-| `reviewer` | `opus` | Opus 5 (`claude-opus-5`) | read-only | high |
-| `qa-engineer` | `sonnet` | Sonnet 5 (`claude-sonnet-5`) | writable | high |
-| `edge-case-analyst` | `opus` | Opus 5 (`claude-opus-5`) | read-only | high |
+| `reviewer` | `opus` | Opus 5.5 (`claude-opus-5-5`) | read-only | high |
+| `qa-engineer` | `opus` | Opus 5.5 (`claude-opus-5-5`) | writable | medium |
+| `edge-case-analyst` | `opus` | Opus 5.5 (`claude-opus-5-5`) | read-only | high |
 | `advisor` | `fable` | Fable 5.1 (`claude-fable-5-1`) | read-only | xhigh |
 
-Effort is omitted (`—`) on the two Haiku roles because Haiku does not support the `effort` frontmatter field; its depth is the Haiku tier itself. `doc-reviewer` explicitly sets `medium` rather than relying on the `high` default that every other Fable/Opus/Sonnet role would otherwise fall back to.
+Every role sets `effort` explicitly rather than relying on the model's default (`high` on Fable and Sonnet, `medium` on Opus 5.5).
 
 Only three roles are writable — `coding-worker`, `fast-coding-worker`, `qa-engineer` — and can edit files. The other seven are read-only by construction: their `tools:` allowlist withholds `Edit`, `Write`, and `NotebookEdit`. No role is ever granted the `Agent` tool, so no subagent can spawn another subagent — delegation is exactly one level deep, and every result returns to the parent.
 

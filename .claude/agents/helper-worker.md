@@ -7,7 +7,8 @@ description: >-
   subsystem's structure. It is read-only and fast — route here when you need
   facts before deciding what to change, not when you need deep root-cause
   analysis (use forensic-analyst) or a judgment-heavy review (use reviewer).
-model: haiku
+model: sonnet
+effort: low
 color: gray
 tools: Read, Grep, Glob, Bash, WebFetch, WebSearch
 ---

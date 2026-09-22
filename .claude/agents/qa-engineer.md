@@ -7,8 +7,8 @@ description: >-
   miss. It may run the app, scaffold a repro, or write a throwaway script to
   drive the flow, but it reports findings rather than fixing anything itself.
   Route confirmed issues to coding-worker or fast-coding-worker afterward.
-model: sonnet
-effort: high
+model: opus
+effort: medium
 color: orange
 tools: Read, Grep, Glob, Bash, WebFetch, WebSearch, Edit, Write, NotebookEdit
 ---
