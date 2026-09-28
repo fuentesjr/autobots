@@ -50,18 +50,18 @@ This document is the **normative, buildable contract** for the Autobots package.
 
 `AGT-1` The roster MUST be exactly these ten roles with exactly these attributes:
 
-| Role | Access | `model` alias | `effort` | Underlying model (informational, as of 2026-09-22) |
-|---|---|---|---|---|
-| `planner` | read-only | `fable` | `xhigh` | Fable 5.1 (`claude-fable-5-1`) |
-| `coding-worker` | writable | `opus` | `medium` | Opus 5.5 (`claude-opus-5-5`) |
-| `fast-coding-worker` | writable | `sonnet` | `low` | Sonnet 5 (`claude-sonnet-5`) |
-| `helper-worker` | read-only | `sonnet` | `low` | Sonnet 5 (`claude-sonnet-5`) |
-| `forensic-analyst` | read-only | `fable` | `xhigh` | Fable 5.1 (`claude-fable-5-1`) |
-| `doc-reviewer` | read-only | `sonnet` | `medium` | Sonnet 5 (`claude-sonnet-5`) |
-| `reviewer` | read-only | `opus` | `high` | Opus 5.5 (`claude-opus-5-5`) |
-| `qa-engineer` | writable | `opus` | `medium` | Opus 5.5 (`claude-opus-5-5`) |
-| `edge-case-analyst` | read-only | `opus` | `high` | Opus 5.5 (`claude-opus-5-5`) |
-| `advisor` | read-only | `fable` | `xhigh` | Fable 5.1 (`claude-fable-5-1`) |
+| Role | Access | `model` alias | `effort` |
+|---|---|---|---|
+| `planner` | read-only | `fable` | `xhigh` |
+| `coding-worker` | writable | `opus` | `medium` |
+| `fast-coding-worker` | writable | `sonnet` | `low` |
+| `helper-worker` | read-only | `sonnet` | `low` |
+| `forensic-analyst` | read-only | `fable` | `xhigh` |
+| `doc-reviewer` | read-only | `sonnet` | `medium` |
+| `reviewer` | read-only | `opus` | `high` |
+| `qa-engineer` | writable | `opus` | `medium` |
+| `edge-case-analyst` | read-only | `opus` | `high` |
+| `advisor` | read-only | `fable` | `xhigh` |
 
 `AGT-2` Model distribution MUST be **3 Fable** (`planner`, `forensic-analyst`, `advisor`) · **4 Opus** (`reviewer`, `edge-case-analyst`, `coding-worker`, `qa-engineer`) · **3 Sonnet** (`doc-reviewer`, `fast-coding-worker`, `helper-worker`).
 

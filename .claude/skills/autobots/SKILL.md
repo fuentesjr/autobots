@@ -162,7 +162,7 @@ model only at hard decision points.
 
 **Roles (ADV-1).** Exactly one writable executor — `coding-worker` (Opus,
 normal work) or `fast-coding-worker` (Sonnet at `low`, maximum cost reduction) — plus
-the read-only `advisor` (Fable 5.1, `xhigh`).
+the read-only `advisor` (Fable, `xhigh`).
 
 **The loop is parent-mediated (ADV-2).** Executors must never consult the
 advisor directly — they have no `Agent` tool, so a direct consult is

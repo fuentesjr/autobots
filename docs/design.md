@@ -30,7 +30,7 @@ The single most important part of this design is the faithful translation of eac
 | Subagent spec | `.codex/agents/<name>.toml` (TOML) | `.claude/agents/<name>.md` (YAML frontmatter + Markdown body) |
 | Skill/dispatcher | `.agents/skills/agenticons/SKILL.md` | `.claude/skills/autobots/SKILL.md` |
 | Agent identifier style | `snake_case` (`coding_worker`) | `kebab-case` (`coding-worker`) — Claude Code convention |
-| Model field | `model = "gpt-5.5"` (pinned full IDs) | `model: fable` (alias; documented ID mapping) |
+| Model field | `model = "gpt-5.5"` (pinned full IDs) | `model: fable` (alias; floats to the current model) |
 | Reasoning depth | `model_reasoning_effort = "low..xhigh"` | `effort: high` frontmatter (same `low..max` scale) — near 1:1 |
 | Access control | `sandbox_mode = "read-only" \| "workspace-write"` | `tools:` allowlist (or `disallowedTools:` denylist) — read-only = withhold `Edit`/`Write`/`NotebookEdit` |
 | No nested delegation | `max_depth = 1` in `config.toml` | omit `Agent` from every role's `tools` (Claude Code otherwise allows nesting to depth 5) |
@@ -45,24 +45,24 @@ The two substitutions worth reading carefully are **access control** (Access Mod
 
 ## Model Mapping
 
-Autobots uses a **task-fit** mapping: every Claude tier is used for the work it suits best, rather than collapsing all flagship Agenticons roles onto a single model. Fable (currently Fable 5.1) — the Mythos-class tier above Opus — is reserved for the roles where a wrong call has the highest downstream cost multiplier: `planner` (a bad decomposition wastes every worker-token that follows), `forensic-analyst`, and `advisor`, all `xhigh`. Opus (currently Opus 5.5) carries the `high`-effort breadth and judgment roles that don't need Fable's serial depth — `reviewer` and `edge-case-analyst` — and, at `medium`, the execution-heavy work: standard implementation (`coding-worker`) and QA's long tool-call loops (`qa-engineer`). Both moved from Sonnet 5 on 2026-09-22: in Anthropic's testing, Opus 5.5 at `medium` matches or beats Opus 5 at `high` on coding, with fewer tokens per task. This has not yet been measured on Autobots tasks. Sonnet 5 handles doc-drift's semantic judgment (`doc-reviewer`) and, at `low`, fast mechanical work (`fast-coding-worker`, `helper-worker`). Those two roles ran on Haiku 4.5 until 2026-09-22; they moved because Haiku 4.5 is eligible for retirement from October 15, 2026, has no successor, and has a February 2025 knowledge cutoff. The model tier therefore tracks each role's work shape — serial depth, breadth, or execution volume — not effort alone.
+Autobots uses a **task-fit** mapping: every Claude tier is used for the work it suits best, rather than collapsing all flagship Agenticons roles onto a single model. Fable — the Mythos-class tier above Opus — is reserved for the roles where a wrong call has the highest downstream cost multiplier: `planner` (a bad decomposition wastes every worker-token that follows), `forensic-analyst`, and `advisor`, all `xhigh`. Opus carries the `high`-effort breadth and judgment roles that don't need Fable's serial depth — `reviewer` and `edge-case-analyst` — and, at `medium`, the execution-heavy work: standard implementation (`coding-worker`) and QA's long tool-call loops (`qa-engineer`). Both moved from Sonnet 5 on 2026-09-22: in Anthropic's testing, Opus 5.5 at `medium` matches or beats Opus 5 at `high` on coding, with fewer tokens per task. This has not yet been measured on Autobots tasks. Sonnet handles doc-drift's semantic judgment (`doc-reviewer`) and, at `low`, fast mechanical work (`fast-coding-worker`, `helper-worker`). Those two roles ran on Haiku 4.5 until 2026-09-22; they moved because Haiku 4.5 is eligible for retirement from October 15, 2026, has no successor, and has a February 2025 knowledge cutoff. The model tier therefore tracks each role's work shape — serial depth, breadth, or execution volume — not effort alone.
 
-| Role | Agenticons model | Claude alias | Claude model (as of 2026-09-22) |
-|---|---|---|---|
-| `planner` | `gpt-5.5` | `fable` | Fable 5.1 (`claude-fable-5-1`) |
-| `coding-worker` | `gpt-5.3-codex` | `opus` | Opus 5.5 (`claude-opus-5-5`) |
-| `fast-coding-worker` | `gpt-5.3-codex-spark` | `sonnet` | Sonnet 5 (`claude-sonnet-5`) |
-| `helper-worker` | `gpt-5.4-mini` | `sonnet` | Sonnet 5 (`claude-sonnet-5`) |
-| `forensic-analyst` | `gpt-5.5` | `fable` | Fable 5.1 (`claude-fable-5-1`) |
-| `doc-reviewer` | `gpt-5.4-mini` | `sonnet` | Sonnet 5 (`claude-sonnet-5`) |
-| `reviewer` | `gpt-5.5` | `opus` | Opus 5.5 (`claude-opus-5-5`) |
-| `qa-engineer` | `gpt-5.5` | `opus` | Opus 5.5 (`claude-opus-5-5`) |
-| `edge-case-analyst` | `gpt-5.5` | `opus` | Opus 5.5 (`claude-opus-5-5`) |
-| `advisor` | — (Autobots-only) | `fable` | Fable 5.1 (`claude-fable-5-1`) |
+| Role | Agenticons model | Claude alias |
+|---|---|---|
+| `planner` | `gpt-5.5` | `fable` |
+| `coding-worker` | `gpt-5.3-codex` | `opus` |
+| `fast-coding-worker` | `gpt-5.3-codex-spark` | `sonnet` |
+| `helper-worker` | `gpt-5.4-mini` | `sonnet` |
+| `forensic-analyst` | `gpt-5.5` | `fable` |
+| `doc-reviewer` | `gpt-5.4-mini` | `sonnet` |
+| `reviewer` | `gpt-5.5` | `opus` |
+| `qa-engineer` | `gpt-5.5` | `opus` |
+| `edge-case-analyst` | `gpt-5.5` | `opus` |
+| `advisor` | — (Autobots-only) | `fable` |
 
 Distribution: **3 Fable · 4 Opus · 3 Sonnet** (ten roles; `advisor` is an Autobots addition with no Agenticons counterpart — see the advisory pattern in Multi-Agent Patterns).
 
-Specs use the short alias (`fable`/`opus`/`sonnet`/`haiku`) in the `model:` field — this matches the idiom of every real Claude Code agent on disk and lets a role float to Claude Code's current best model for that tier. The exact underlying model is documented here and in `README.md`. Pinning full model IDs (e.g. `claude-fable-5`) is the stricter-reproducibility alternative; it can be adopted later without changing any other part of the contract.
+Specs use the short alias (`fable`/`opus`/`sonnet`/`haiku`) in the `model:` field — this matches the idiom of every real Claude Code agent on disk and lets a role float to Claude Code's current best model for that tier. Autobots assumes the Anthropic API provider; alias resolution differs by provider and Claude Code version (see [Claude Code's alias table](https://code.claude.com/docs/en/model-config#model-aliases)). The docs name tiers, not model versions, so a model release needs no doc change; the model IDs a routing-gate run actually tested are recorded as `resolved_models` in its `evals/results/*.json` file. Pinning full model IDs (e.g. `claude-fable-5`) is the stricter-reproducibility alternative; it can be adopted later without changing any other part of the contract.
 
 ### Model-routing caveat: `CLAUDE_CODE_SUBAGENT_MODEL`
 
@@ -77,18 +77,18 @@ Claude Code resolves a subagent's model in this order (first match wins):
 
 ## Agent Roles
 
-| Role | Access | Model (as of 2026-09-22) | Effort | Responsibility |
+| Role | Access | Model | Effort | Responsibility |
 |---|---|---:|---|---|
-| `planner` | read-only | Fable 5.1 | xhigh | Architecture, decomposition, sequencing, risk analysis |
-| `coding-worker` | writable | Opus 5.5 | medium | Normal implementation, bug fixes, refactors |
-| `fast-coding-worker` | writable | Sonnet 5 | low | Small localized edits and quick fixes |
-| `helper-worker` | read-only | Sonnet 5 | low | Quick lookup, repo reconnaissance, evidence gathering |
-| `forensic-analyst` | read-only | Fable 5.1 | xhigh | Deep root-cause investigation, intermittent and cross-system failures, forensic reports |
-| `doc-reviewer` | read-only | Sonnet 5 | medium | Documentation correctness and drift review |
-| `reviewer` | read-only | Opus 5.5 | high | Standard correctness, security, maintainability, regression review |
-| `qa-engineer` | writable | Opus 5.5 | medium | Exploratory QA verification: exercises changes end-to-end, probes regressions, performance, and user-facing rough edges |
-| `edge-case-analyst` | read-only | Opus 5.5 | high | Edge-case and coverage-gap discovery: finds unconsidered cases and specifies expected behavior and test cases |
-| `advisor` | read-only | Fable 5.1 | xhigh | Guidance-only consultant for the advisory pattern: returns a plan, correction, or stop signal; never edits, never produces user-facing output |
+| `planner` | read-only | Fable | xhigh | Architecture, decomposition, sequencing, risk analysis |
+| `coding-worker` | writable | Opus | medium | Normal implementation, bug fixes, refactors |
+| `fast-coding-worker` | writable | Sonnet | low | Small localized edits and quick fixes |
+| `helper-worker` | read-only | Sonnet | low | Quick lookup, repo reconnaissance, evidence gathering |
+| `forensic-analyst` | read-only | Fable | xhigh | Deep root-cause investigation, intermittent and cross-system failures, forensic reports |
+| `doc-reviewer` | read-only | Sonnet | medium | Documentation correctness and drift review |
+| `reviewer` | read-only | Opus | high | Standard correctness, security, maintainability, regression review |
+| `qa-engineer` | writable | Opus | medium | Exploratory QA verification: exercises changes end-to-end, probes regressions, performance, and user-facing rough edges |
+| `edge-case-analyst` | read-only | Opus | high | Edge-case and coverage-gap discovery: finds unconsidered cases and specifies expected behavior and test cases |
+| `advisor` | read-only | Fable | xhigh | Guidance-only consultant for the advisory pattern: returns a plan, correction, or stop signal; never edits, never produces user-facing output |
 
 The roles, responsibilities, and read-only/writable split carry over from Agenticons' original nine, plus one Autobots-only addition, `advisor`, which exists for the advisory pattern and has no Agenticons counterpart. Effort levels are not a straight port, though: parity with Agenticons' `model_reasoning_effort` assignments was never a design goal, and they were tuned instead for the Claude model family and this package's own task-fit rationale (see Model Mapping).
 
@@ -153,7 +153,7 @@ Agenticons sets a per-agent `model_reasoning_effort` (`low` → `xhigh`). Claude
 Two caveats shape the rendering:
 
 - **Haiku has no effort support.** The `effort` setting applies to the Fable, Opus, and Sonnet tiers; Haiku ignores it, so a Haiku role must omit `effort`. The current roster has no Haiku roles.
-- **Default effort varies by model.** A role that omits `effort` runs at the model's default — `high` on Fable and Sonnet, but `medium` on Opus 5.5. Autobots therefore sets `effort` explicitly on every Fable/Opus/Sonnet role to encode the contract rather than lean on a default — including `doc-reviewer: medium`, which must be explicit to avoid silently running `high`.
+- **Default effort varies by model.** A role that omits `effort` runs at the model's default, which differs across tiers and model versions. Autobots therefore sets `effort` explicitly on every Fable/Opus/Sonnet role to encode the contract rather than lean on a default — including `doc-reviewer: medium`, which must be explicit to avoid silently running `high`.
 
 | Role | Agenticons `model_reasoning_effort` | Autobots `effort:` |
 |---|---|---|

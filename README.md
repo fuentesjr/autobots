@@ -14,20 +14,22 @@ Escape hatches always win over activation. If a user says any of `no subagents`,
 
 Every role is pinned to a Claude model tier chosen for task fit: Fable for the roles where errors carry the highest downstream cost (planner, forensic-analyst, advisor — all `xhigh`), Opus for breadth/judgment work at `high` (reviewer, edge-case-analyst) and execution-heavy work at `medium` (standard implementation, QA's long tool-call loops) and Sonnet for doc-drift's semantic judgment plus, at `low`, fast mechanical work (small edits, quick lookups). Distribution across the ten roles: **3 Fable · 4 Opus · 3 Sonnet**.
 
-| Role | Model alias | Underlying model (as of 2026-09-22) | Access | Effort |
-|---|---|---|---|---|
-| `planner` | `fable` | Fable 5.1 (`claude-fable-5-1`) | read-only | xhigh |
-| `coding-worker` | `opus` | Opus 5.5 (`claude-opus-5-5`) | writable | medium |
-| `fast-coding-worker` | `sonnet` | Sonnet 5 (`claude-sonnet-5`) | writable | low |
-| `helper-worker` | `sonnet` | Sonnet 5 (`claude-sonnet-5`) | read-only | low |
-| `forensic-analyst` | `fable` | Fable 5.1 (`claude-fable-5-1`) | read-only | xhigh |
-| `doc-reviewer` | `sonnet` | Sonnet 5 (`claude-sonnet-5`) | read-only | medium |
-| `reviewer` | `opus` | Opus 5.5 (`claude-opus-5-5`) | read-only | high |
-| `qa-engineer` | `opus` | Opus 5.5 (`claude-opus-5-5`) | writable | medium |
-| `edge-case-analyst` | `opus` | Opus 5.5 (`claude-opus-5-5`) | read-only | high |
-| `advisor` | `fable` | Fable 5.1 (`claude-fable-5-1`) | read-only | xhigh |
+| Role | Model alias | Access | Effort |
+|---|---|---|---|
+| `planner` | `fable` | read-only | xhigh |
+| `coding-worker` | `opus` | writable | medium |
+| `fast-coding-worker` | `sonnet` | writable | low |
+| `helper-worker` | `sonnet` | read-only | low |
+| `forensic-analyst` | `fable` | read-only | xhigh |
+| `doc-reviewer` | `sonnet` | read-only | medium |
+| `reviewer` | `opus` | read-only | high |
+| `qa-engineer` | `opus` | writable | medium |
+| `edge-case-analyst` | `opus` | read-only | high |
+| `advisor` | `fable` | read-only | xhigh |
 
-Every role sets `effort` explicitly rather than relying on the model's default (`high` on Fable and Sonnet, `medium` on Opus 5.5).
+Autobots assumes the Anthropic API provider. On that provider each alias resolves to Claude Code's recommended model for its tier, so a new model release needs no change here; other providers (Bedrock, Google Cloud, Foundry, Claude Platform on AWS) can resolve the same alias to an older model — see [Claude Code's alias table](https://code.claude.com/docs/en/model-config#model-aliases). To see what an alias resolves to today, run `claude -p --model sonnet --output-format json "ok" | jq '.modelUsage | keys'`. The model IDs a routing-gate run actually tested are recorded as `resolved_models` in its `evals/results/*.json` file.
+
+Every role sets `effort` explicitly rather than relying on the model's default, which differs across tiers and model versions.
 
 Only three roles are writable — `coding-worker`, `fast-coding-worker`, `qa-engineer` — and can edit files. The other seven are read-only by construction: their `tools:` allowlist withholds `Edit`, `Write`, and `NotebookEdit`. No role is ever granted the `Agent` tool, so no subagent can spawn another subagent — delegation is exactly one level deep, and every result returns to the parent.
 

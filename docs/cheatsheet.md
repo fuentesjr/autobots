@@ -33,18 +33,18 @@ ask for delegation explicitly.
 
 Distribution: **3 Fable · 4 Opus · 3 Sonnet**.
 
-| Role | Model (as of 2026-09-22) | Effort | Access | Reach for it when… |
+| Role | Model | Effort | Access | Reach for it when… |
 |---|---|---|---|---|
-| `planner` | Fable 5.1 | xhigh | read-only | you need architecture, decomposition, sequencing, risk analysis before code |
-| `coding-worker` | Opus 5.5 | medium | **writable** | normal-scope implementation, bug fixes, refactors |
-| `fast-coding-worker` | Sonnet 5 | low | **writable** | small, localized, low-risk edits / quick fixes |
-| `helper-worker` | Sonnet 5 | low | read-only | quick lookup, repo recon, evidence gathering before editing |
-| `forensic-analyst` | Fable 5.1 | xhigh | read-only | deep root-cause on hard/intermittent/cross-system bugs |
-| `doc-reviewer` | Sonnet 5 | medium | read-only | documentation correctness / drift review |
-| `reviewer` | Opus 5.5 | high | read-only | correctness, security, maintainability, regression review |
-| `qa-engineer` | Opus 5.5 | medium | **writable** | exercise a change end-to-end (regressions, perf, UX rough edges) |
-| `edge-case-analyst` | Opus 5.5 | high | read-only | find uncovered cases + propose specs and concrete test cases |
-| `advisor` | Fable 5.1 | xhigh | read-only | guidance-only consultant for the advisory pattern (plan / correction / stop) |
+| `planner` | Fable | xhigh | read-only | you need architecture, decomposition, sequencing, risk analysis before code |
+| `coding-worker` | Opus | medium | **writable** | normal-scope implementation, bug fixes, refactors |
+| `fast-coding-worker` | Sonnet | low | **writable** | small, localized, low-risk edits / quick fixes |
+| `helper-worker` | Sonnet | low | read-only | quick lookup, repo recon, evidence gathering before editing |
+| `forensic-analyst` | Fable | xhigh | read-only | deep root-cause on hard/intermittent/cross-system bugs |
+| `doc-reviewer` | Sonnet | medium | read-only | documentation correctness / drift review |
+| `reviewer` | Opus | high | read-only | correctness, security, maintainability, regression review |
+| `qa-engineer` | Opus | medium | **writable** | exercise a change end-to-end (regressions, perf, UX rough edges) |
+| `edge-case-analyst` | Opus | high | read-only | find uncovered cases + propose specs and concrete test cases |
+| `advisor` | Fable | xhigh | read-only | guidance-only consultant for the advisory pattern (plan / correction / stop) |
 
 Only the three **writable** roles can edit files. The other seven are read-only
 (they can still run read-only shell inspection). No role can spawn another

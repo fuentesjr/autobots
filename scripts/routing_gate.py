@@ -88,7 +88,8 @@ Valid answers: {names}
 """
 
 
-def run_claude(prompt: str, model: str) -> str:
+def run_claude(prompt: str, model: str) -> tuple[str, list[str]]:
+    """Returns (response text, model IDs the alias resolved to)."""
     cmd = [
         "claude",
         "--safe-mode",
@@ -98,17 +99,23 @@ def run_claude(prompt: str, model: str) -> str:
         "dontAsk",
         "--no-session-persistence",
         "-p",
+        "--output-format",
+        "json",
         "--model",
         model,
         prompt,
     ]
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
     if r.returncode != 0:
-        return f"ERROR:{r.returncode}:{r.stderr[:200]}"
-    return r.stdout.strip()
+        return f"ERROR:{r.returncode}:{r.stderr[:200]}", []
+    try:
+        out = json.loads(r.stdout)
+    except json.JSONDecodeError:
+        return f"ERROR:bad-json:{r.stdout[:200]}", []
+    return str(out.get("result", "")).strip(), sorted(out.get("modelUsage", {}))
 
 
-def run_grok(prompt: str, model: str) -> str:
+def run_grok(prompt: str, model: str) -> tuple[str, list[str]]:
     # Headless single-turn: -p/--single prints response and exits.
     cmd = [
         "grok",
@@ -121,8 +128,9 @@ def run_grok(prompt: str, model: str) -> str:
     ]
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
     if r.returncode != 0:
-        return f"ERROR:{r.returncode}:{(r.stderr or r.stdout)[:200]}"
-    return r.stdout.strip()
+        return f"ERROR:{r.returncode}:{(r.stderr or r.stdout)[:200]}", []
+    # grok -p does not report the resolved model ID.
+    return r.stdout.strip(), []
 
 
 def normalize_answer(raw: str, valid: set[str]) -> str:
@@ -159,6 +167,7 @@ def main() -> int:
     results = {
         "provider": args.provider,
         "model": model,
+        "resolved_models": [],
         "strip_examples": args.strip_examples,
         "n": n,
         "cases": [],
@@ -167,15 +176,17 @@ def main() -> int:
         "n_total": 0,
     }
 
+    resolved: set[str] = set()
     for case in scenarios["cases"]:
         case_pass = 0
         trials = []
         for i in range(n):
             prompt = build_prompt(agents, case["prompt"].strip(), sorted(valid - {"none"}) + (["none"]))
             if args.provider == "claude":
-                raw = run_claude(prompt, model)
+                raw, ids = run_claude(prompt, model)
             else:
-                raw = run_grok(prompt, model)
+                raw, ids = run_grok(prompt, model)
+            resolved.update(ids)
             ans = normalize_answer(raw, valid)
             ok = ans == case["expected"]
             if ok:
@@ -196,7 +207,9 @@ def main() -> int:
         results["n_total"] += n
         print(f"{case['id']}: {case_pass}/{n} expected={case['expected']}", flush=True)
 
+    results["resolved_models"] = sorted(resolved)
     results["pass_rate"] = results["n_pass"] / results["n_total"] if results["n_total"] else 0.0
+    print(f"MODEL: {model} -> {', '.join(results['resolved_models']) or 'unreported'}", flush=True)
     print(f"OVERALL: {results['n_pass']}/{results['n_total']} ({results['pass_rate']:.1%})", flush=True)
 
     if args.out:
