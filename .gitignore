@@ -5,3 +5,6 @@
 # Machine-local Claude Code settings — never commit (the rest of .claude/,
 # the shipped agent specs + dispatcher skill, IS the package payload).
 .claude/settings.local.json
+
+# role eval fixtures, oracles, and run output stay local (owner decision 2026-09-28)
+evals/roles/
