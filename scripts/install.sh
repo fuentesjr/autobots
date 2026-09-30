@@ -195,14 +195,36 @@ if [ "$GLOBAL" -eq 1 ] && [ -n "$TARGET_REPO" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# INS-6: warn loudly if CLAUDE_CODE_SUBAGENT_MODEL is set, since it silently
-# collapses per-role model routing onto a single model.
+# INS-6: warn loudly if CLAUDE_CODE_SUBAGENT_MODEL_FORCE is set, since it
+# makes Claude Code ignore every subagent's 'model:' frontmatter and collapses
+# per-role model routing onto a single model.
 # ---------------------------------------------------------------------------
-if [ -n "${CLAUDE_CODE_SUBAGENT_MODEL:-}" ]; then
-  warn "CLAUDE_CODE_SUBAGENT_MODEL is set to '${CLAUDE_CODE_SUBAGENT_MODEL}'."
-  warn "This silently overrides the per-role 'model:' frontmatter that Autobots ships,"
-  warn "collapsing the entire agent roster onto a single model. Unset it if you want"
-  warn "each Autobots role to run the model its spec declares."
+if [ -n "${CLAUDE_CODE_SUBAGENT_MODEL_FORCE:-}" ]; then
+  warn "CLAUDE_CODE_SUBAGENT_MODEL_FORCE is set to '${CLAUDE_CODE_SUBAGENT_MODEL_FORCE}'."
+  warn "This makes Claude Code ignore the per-role 'model:' frontmatter that Autobots"
+  warn "ships, collapsing the entire agent roster onto a single model. Unset it if you"
+  warn "want each Autobots role to run the model its spec declares."
+fi
+
+# Roles pin family aliases (fable/opus/sonnet) so they track the newest model
+# per family. ANTHROPIC_DEFAULT_*_MODEL redirects an alias outright, and on
+# Claude Code older than 2.1.255 the aliases resolve to older models.
+for alias_var in ANTHROPIC_DEFAULT_FABLE_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL; do
+  if [ -n "${!alias_var:-}" ]; then
+    warn "${alias_var} is set to '${!alias_var}'. It redirects the family alias that"
+    warn "Autobots roles pin, so those roles will not run the newest model in that family."
+  fi
+done
+
+MIN_CLAUDE_VERSION="2.1.255"
+if command -v claude >/dev/null 2>&1; then
+  CLAUDE_VERSION="$(claude --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)"
+  if [ -n "$CLAUDE_VERSION" ] && [ "$CLAUDE_VERSION" != "$MIN_CLAUDE_VERSION" ] &&
+     [ "$(printf '%s\n%s\n' "$CLAUDE_VERSION" "$MIN_CLAUDE_VERSION" | sort -t. -k1,1n -k2,2n -k3,3n | head -n1)" = "$CLAUDE_VERSION" ]; then
+    warn "Claude Code ${CLAUDE_VERSION} is older than ${MIN_CLAUDE_VERSION}. The 'fable' alias resolves to"
+    warn "Fable 5 there (Fable 5.1 from ${MIN_CLAUDE_VERSION}), and before 2.1.251 CLAUDE_CODE_SUBAGENT_MODEL"
+    warn "overrides per-role routing. Update Claude Code to get the roster's newest models."
+  fi
 fi
 
 # ---------------------------------------------------------------------------

@@ -814,10 +814,10 @@ var expectedRoster = map[string]rosterEntry{
 	"fast-coding-worker": {model: "sonnet", effort: "low", writable: true},
 	"helper-worker":      {model: "sonnet", effort: "low", writable: false},
 	"forensic-analyst":   {model: "fable", effort: "xhigh", writable: false},
-	"doc-reviewer":       {model: "sonnet", effort: "medium", writable: false},
-	"reviewer":           {model: "opus", effort: "high", writable: false},
-	"qa-engineer":        {model: "opus", effort: "medium", writable: true},
-	"edge-case-analyst":  {model: "opus", effort: "high", writable: false},
+	"doc-reviewer":       {model: "opus", effort: "high", writable: false},
+	"reviewer":           {model: "fable", effort: "high", writable: false},
+	"qa-engineer":        {model: "opus", effort: "high", writable: true},
+	"edge-case-analyst":  {model: "fable", effort: "xhigh", writable: false},
 	"advisor":            {model: "fable", effort: "xhigh", writable: false},
 }
 

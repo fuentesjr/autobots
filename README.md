@@ -12,46 +12,44 @@ Escape hatches always win over activation. If a user says any of `no subagents`,
 
 ## The roster and model mapping
 
-Every role is pinned to a Claude model tier chosen for task fit: Fable for the roles where errors carry the highest downstream cost (planner, forensic-analyst, advisor — all `xhigh`), Opus for breadth/judgment work at `high` (reviewer, edge-case-analyst) and execution-heavy work at `medium` (standard implementation, QA's long tool-call loops) and Sonnet for doc-drift's semantic judgment plus, at `low`, fast mechanical work (small edits, quick lookups). Distribution across the ten roles: **3 Fable · 4 Opus · 3 Sonnet**.
+Every role is pinned to a Claude model family chosen for task fit. Roles whose output gates correctness run on Fable with deep reasoning: `planner`, `forensic-analyst`, `advisor`, and `edge-case-analyst` at `xhigh`, and `reviewer` at `high` (it runs after every change, and `high` keeps its findings precise rather than speculative). Opus carries the execution-heavy and judgment roles: `coding-worker` at `medium` (standard implementation), `qa-engineer` at `high` (long tool-call loops), and `doc-reviewer` at `high` (semantic drift checks). Sonnet at `low` covers fast mechanical work: `fast-coding-worker` (small edits) and `helper-worker` (quick lookups). Distribution across the ten roles: **5 Fable · 3 Opus · 2 Sonnet · 0 Haiku**.
 
-| Role | Model alias | Access | Effort |
+| Role | Model (alias → resolves to) | Access | Effort |
 |---|---|---|---|
-| `planner` | `fable` | read-only | xhigh |
-| `coding-worker` | `opus` | writable | medium |
-| `fast-coding-worker` | `sonnet` | writable | low |
-| `helper-worker` | `sonnet` | read-only | low |
-| `forensic-analyst` | `fable` | read-only | xhigh |
-| `doc-reviewer` | `sonnet` | read-only | medium |
-| `reviewer` | `opus` | read-only | high |
-| `qa-engineer` | `opus` | writable | medium |
-| `edge-case-analyst` | `opus` | read-only | high |
-| `advisor` | `fable` | read-only | xhigh |
+| `planner` | `fable` → Fable 5.1 | read-only | xhigh |
+| `coding-worker` | `opus` → Opus 5.5 | writable | medium |
+| `fast-coding-worker` | `sonnet` → Sonnet 5.5 | writable | low |
+| `helper-worker` | `sonnet` → Sonnet 5.5 | read-only | low |
+| `forensic-analyst` | `fable` → Fable 5.1 | read-only | xhigh |
+| `doc-reviewer` | `opus` → Opus 5.5 | read-only | high |
+| `reviewer` | `fable` → Fable 5.1 | read-only | high |
+| `qa-engineer` | `opus` → Opus 5.5 | writable | high |
+| `edge-case-analyst` | `fable` → Fable 5.1 | read-only | xhigh |
+| `advisor` | `fable` → Fable 5.1 | read-only | xhigh |
 
-Autobots assumes the Anthropic API provider. On that provider each alias resolves to Claude Code's recommended model for its tier, so a new model release needs no change here; other providers (Bedrock, Google Cloud, Foundry, Claude Platform on AWS) can resolve the same alias to an older model — see [Claude Code's alias table](https://code.claude.com/docs/en/model-config#model-aliases). To see what an alias resolves to today, run `claude -p --model sonnet --output-format json "ok" | jq '.modelUsage | keys'`. The model IDs a routing-gate run actually tested are recorded as `resolved_models` in its `evals/results/*.json` file.
-
-Every role sets `effort` explicitly rather than relying on the model's default, which differs across tiers and model versions.
+Each role's `model:` is a family alias (`fable`, `opus`, `sonnet`), not a versioned ID, so a role always runs the newest model Claude Code knows for that family: when a new Fable ships and Claude Code re-points the alias, every Fable role moves with it, with no roster edit. Autobots assumes the Anthropic API provider; other providers (Bedrock, Google Cloud, Foundry, Claude Platform on AWS) can resolve the same alias to an older model — see [Claude Code's alias table](https://code.claude.com/docs/en/model-config#model-aliases). The "resolves to" column is what those aliases meant on Claude Code 2.1.255 or later (before 2.1.255, `fable` meant Fable 5). Two things can make an alias resolve to something else: an older Claude Code build, and an `ANTHROPIC_DEFAULT_FABLE_MODEL`/`_OPUS_MODEL`/`_SONNET_MODEL` environment variable, which redirects the alias outright. The installer warns on both. To see what an alias resolves to today, run `claude -p --model sonnet --output-format json "ok" | jq '.modelUsage | keys'`; the model IDs a routing-gate run actually tested are recorded as `resolved_models` in its `evals/results/*.json` file. Every role also sets `effort` explicitly rather than inheriting the session's effort level. No role runs on Haiku.
 
 Only three roles are writable — `coding-worker`, `fast-coding-worker`, `qa-engineer` — and can edit files. The other seven are read-only by construction: their `tools:` allowlist withholds `Edit`, `Write`, and `NotebookEdit`. No role is ever granted the `Agent` tool, so no subagent can spawn another subagent — delegation is exactly one level deep, and every result returns to the parent.
 
-## Caveat: `CLAUDE_CODE_SUBAGENT_MODEL` must be unset
+## Caveat: `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` must be unset
 
 Claude Code resolves a subagent's model in this order, first match wins:
 
-1. `CLAUDE_CODE_SUBAGENT_MODEL` environment variable
-2. a per-invocation `model` parameter set by the delegating agent
-3. the subagent's frontmatter `model:`
+1. a per-invocation `model` parameter set by the delegating agent
+2. the subagent's frontmatter `model:`
+3. the `CLAUDE_CODE_SUBAGENT_MODEL` environment variable
 4. the main conversation's model
 
-**If `CLAUDE_CODE_SUBAGENT_MODEL` is set, it overrides every role's frontmatter `model:` and collapses the entire ten-role roster onto a single model.** The per-role routing table above — the whole point of Autobots — holds only when this variable is **unset**. This is not a hypothetical edge case: it is easy to have this variable set globally in `~/.claude/settings.json` (for example, to `"sonnet"`) for unrelated reasons and forget it is there.
+Autobots pins every role at step 2, so `CLAUDE_CODE_SUBAGENT_MODEL` on its own does not touch the roster — it is only a default for subagents that declare no model. **`CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1` is different: it makes Claude Code ignore the `model:` field of every subagent definition and run them all on `CLAUDE_CODE_SUBAGENT_MODEL` (or on the main conversation's model when that is unset), collapsing the entire ten-role roster onto a single model.** The per-role routing table above — the whole point of Autobots — holds only when `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is **unset**. It is easy to have it set globally in `~/.claude/settings.json` for unrelated reasons and forget it is there.
 
 Before relying on Autobots' model-tier routing:
 
 ```bash
-echo "$CLAUDE_CODE_SUBAGENT_MODEL"   # should print nothing
-unset CLAUDE_CODE_SUBAGENT_MODEL
+echo "$CLAUDE_CODE_SUBAGENT_MODEL_FORCE"   # should print nothing
+unset CLAUDE_CODE_SUBAGENT_MODEL_FORCE
 ```
 
-`scripts/install.sh` checks for this variable at install time and warns if it is set, but it cannot unset a variable in your shell for you — you must unset it (or remove it from wherever it's exported) yourself.
+`scripts/install.sh` checks for this variable at install time and warns if it is set, but it cannot unset a variable in your shell for you — you must unset it (or remove it from wherever it's exported) yourself. Before Claude Code v2.1.251, `CLAUDE_CODE_SUBAGENT_MODEL` itself came first in the order above and overrode frontmatter; on those versions, unset it too.
 
 ## Install
 

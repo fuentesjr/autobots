@@ -8,7 +8,7 @@ description: >-
   drive the flow, but it reports findings rather than fixing anything itself.
   Route confirmed issues to coding-worker or fast-coding-worker afterward.
 model: opus
-effort: medium
+effort: high
 color: orange
 tools: Read, Grep, Glob, Bash, WebFetch, WebSearch, Edit, Write, NotebookEdit
 ---

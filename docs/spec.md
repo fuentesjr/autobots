@@ -39,7 +39,7 @@ This document is the **normative, buildable contract** for the Autobots package.
 | `docs/spec.md` | This document | `VAL-14` (§3 roster table) |
 | `docs/faq.md` | User FAQ | `VAL-7`, `VAL-12` |
 | `docs/cheatsheet.md` | Usage cheatsheet | `VAL-7`, `VAL-8`, `VAL-10`, `VAL-12` |
-| `README.md` | Overview + model mapping + `CLAUDE_CODE_SUBAGENT_MODEL` caveat | `VAL-7`, `VAL-8`, `VAL-12`, `MDL-3` |
+| `README.md` | Overview + model mapping + `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` caveat | `VAL-7`, `VAL-8`, `VAL-12`, `MDL-3` |
 | `.github/workflows/validate.yml` | CI running the acceptance commands (§11) | `ACC-4` |
 
 `ART-3` There MUST be exactly ten agent files under `.claude/agents/`, one per role in §3. The installer, `SKILL.md`, `README.md`, `docs/design.md`, `docs/faq.md`, and `docs/cheatsheet.md` MUST reference the same ten role names (enforced by `VAL-7`, `VAL-9`, `VAL-11`, `VAL-14`).
@@ -50,20 +50,20 @@ This document is the **normative, buildable contract** for the Autobots package.
 
 `AGT-1` The roster MUST be exactly these ten roles with exactly these attributes:
 
-| Role | Access | `model` alias | `effort` |
-|---|---|---|---|
-| `planner` | read-only | `fable` | `xhigh` |
-| `coding-worker` | writable | `opus` | `medium` |
-| `fast-coding-worker` | writable | `sonnet` | `low` |
-| `helper-worker` | read-only | `sonnet` | `low` |
-| `forensic-analyst` | read-only | `fable` | `xhigh` |
-| `doc-reviewer` | read-only | `sonnet` | `medium` |
-| `reviewer` | read-only | `opus` | `high` |
-| `qa-engineer` | writable | `opus` | `medium` |
-| `edge-case-analyst` | read-only | `opus` | `high` |
-| `advisor` | read-only | `fable` | `xhigh` |
+| Role | Access | `model` alias | `effort` | Resolves to (Claude Code 2.1.255+) |
+|---|---|---|---|---|
+| `planner` | read-only | `fable` | `xhigh` | Fable 5.1 |
+| `coding-worker` | writable | `opus` | `medium` | Opus 5.5 |
+| `fast-coding-worker` | writable | `sonnet` | `low` | Sonnet 5.5 |
+| `helper-worker` | read-only | `sonnet` | `low` | Sonnet 5.5 |
+| `forensic-analyst` | read-only | `fable` | `xhigh` | Fable 5.1 |
+| `doc-reviewer` | read-only | `opus` | `high` | Opus 5.5 |
+| `reviewer` | read-only | `fable` | `high` | Fable 5.1 |
+| `qa-engineer` | writable | `opus` | `high` | Opus 5.5 |
+| `edge-case-analyst` | read-only | `fable` | `xhigh` | Fable 5.1 |
+| `advisor` | read-only | `fable` | `xhigh` | Fable 5.1 |
 
-`AGT-2` Model distribution MUST be **3 Fable** (`planner`, `forensic-analyst`, `advisor`) · **4 Opus** (`reviewer`, `edge-case-analyst`, `coding-worker`, `qa-engineer`) · **3 Sonnet** (`doc-reviewer`, `fast-coding-worker`, `helper-worker`).
+`AGT-2` Model distribution MUST be **5 Fable** (`planner`, `forensic-analyst`, `reviewer`, `edge-case-analyst`, `advisor`) · **3 Opus** (`coding-worker`, `doc-reviewer`, `qa-engineer`) · **2 Sonnet** (`fast-coding-worker`, `helper-worker`) · **0 Haiku**.
 
 `AGT-3` Exactly three roles MUST be writable: `coding-worker`, `fast-coding-worker`, `qa-engineer`. All other seven roles MUST be read-only.
 
@@ -80,7 +80,7 @@ This document is the **normative, buildable contract** for the Autobots package.
 | `name` | MUST be present, `kebab-case`, and equal to the filename without `.md`. MUST be unique across the roster. |
 | `description` | MUST be present and non-blank. MUST describe when to route to the role and SHOULD include one or more `<example>` trigger blocks that drive automatic delegation. |
 | `model` | MUST be present and MUST be one of `fable`, `opus`, `sonnet`, `haiku`, matching §3 for the role. |
-| `effort` | MUST be present on every Fable/Opus/Sonnet role with the value in §3. MUST be omitted on any Haiku role (none in the current roster). |
+| `effort` | MUST be present on every Fable/Opus/Sonnet role with the value in §3. MUST be omitted on every Haiku role (currently none in the roster). |
 | `tools` | MUST be present and MUST be exactly the access-class list in §4.2. MUST NOT contain `Agent`. MUST NOT contain any todo tool (`TaskCreate`, `TaskGet`, `TaskUpdate`, `TaskList`). |
 | `color` | MAY be present (optional UI color). |
 
@@ -130,11 +130,11 @@ tools: Read, Grep, Glob, Bash, WebFetch, WebSearch, Edit, Write, NotebookEdit
 
 ## 5. Model Routing
 
-`MDL-1` Each role MUST be pinned to the `model` alias in §3 via its frontmatter. Specs MUST use the short alias (`fable`/`opus`/`sonnet`/`haiku`), not a full model ID. **[Deferred]** Pinning full model IDs (e.g. `claude-fable-5`) is the stricter-reproducibility alternative and MAY be adopted later without changing any other part of the contract.
+`MDL-1` Each role MUST be pinned to the `model` family alias in §3 via its frontmatter. Specs MUST use the alias (`fable`/`opus`/`sonnet`/`haiku`), not a full model ID, so that each role runs the newest model Claude Code knows for its family without a roster edit. Any doc that names the concrete model an alias resolves to MUST state the Claude Code version that resolution is true for (§3 states 2.1.255+). Pinning full model IDs remains a rejected alternative: it would freeze the roster on a version.
 
 `MDL-2` The parent MUST spawn each role with the model pinned in its spec and MUST NOT override a role to an unlisted model at dispatch time. Model changes MUST happen by editing the spec plus docs, never ad hoc.
 
-`MDL-3` The per-role model contract holds only when the `CLAUDE_CODE_SUBAGENT_MODEL` environment variable is **unset**. The package MUST document that per-role routing requires this variable to be unset, because Claude Code resolves it ahead of frontmatter `model:` and would collapse the whole roster onto one model. `README.md` MUST surface this caveat, and the installer MUST warn when the variable is set (`INS-6`).
+`MDL-3` The per-role model contract holds only when the `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` environment variable is **unset**. The package MUST document that per-role routing requires this variable to be unset, because while it is set Claude Code ignores every subagent definition's frontmatter `model:` and would collapse the whole roster onto one model. `CLAUDE_CODE_SUBAGENT_MODEL` alone is only a default for subagents that declare no model and does not override frontmatter (Claude Code v2.1.251+; before that it did, and the documentation MUST note it). `README.md` MUST surface this caveat, and the installer MUST warn when the variable is set (`INS-6`).
 
 ## 6. Dispatch and Orchestration
 
@@ -258,7 +258,7 @@ The advisor MUST NOT edit files and MUST NOT produce user-facing output.
 
 `INS-5` The installer MUST NOT overwrite existing, differing files unless `--force` is given, and MUST make no writes under `--dry-run`.
 
-`INS-6` The installer MUST warn when `CLAUDE_CODE_SUBAGENT_MODEL` is set in the environment, because it silently overrides per-role model routing (`MDL-3`).
+`INS-6` The installer MUST warn when `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is set in the environment, because it silently overrides per-role model routing (`MDL-3`). It MUST also warn when any `ANTHROPIC_DEFAULT_FABLE_MODEL`/`ANTHROPIC_DEFAULT_OPUS_MODEL`/`ANTHROPIC_DEFAULT_SONNET_MODEL` variable is set, because it redirects the family alias a role pins (`MDL-1`), and when the installed `claude` is older than 2.1.255, because the aliases resolve to older models there. The version check MUST be skipped silently when `claude` is not on `PATH`.
 
 `INS-7` After install, the installer MUST advise the user to start a new Claude Code session so the agents are picked up (subagent file edits require a session restart unless made via `/agents`; skill edits are picked up live).
 

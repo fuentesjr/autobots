@@ -31,7 +31,7 @@ ask for delegation explicitly.
 
 ## The roster (ten roles)
 
-Distribution: **3 Fable · 4 Opus · 3 Sonnet**.
+Distribution: **5 Fable · 3 Opus · 2 Sonnet · 0 Haiku**.
 
 | Role | Model | Effort | Access | Reach for it when… |
 |---|---|---|---|---|
@@ -40,10 +40,10 @@ Distribution: **3 Fable · 4 Opus · 3 Sonnet**.
 | `fast-coding-worker` | Sonnet | low | **writable** | small, localized, low-risk edits / quick fixes |
 | `helper-worker` | Sonnet | low | read-only | quick lookup, repo recon, evidence gathering before editing |
 | `forensic-analyst` | Fable | xhigh | read-only | deep root-cause on hard/intermittent/cross-system bugs |
-| `doc-reviewer` | Sonnet | medium | read-only | documentation correctness / drift review |
-| `reviewer` | Opus | high | read-only | correctness, security, maintainability, regression review |
-| `qa-engineer` | Opus | medium | **writable** | exercise a change end-to-end (regressions, perf, UX rough edges) |
-| `edge-case-analyst` | Opus | high | read-only | find uncovered cases + propose specs and concrete test cases |
+| `doc-reviewer` | Opus | high | read-only | documentation correctness / drift review |
+| `reviewer` | Fable | high | read-only | correctness, security, maintainability, regression review |
+| `qa-engineer` | Opus | high | **writable** | exercise a change end-to-end (regressions, perf, UX rough edges) |
+| `edge-case-analyst` | Fable | xhigh | read-only | find uncovered cases + propose specs and concrete test cases |
 | `advisor` | Fable | xhigh | read-only | guidance-only consultant for the advisory pattern (plan / correction / stop) |
 
 Only the three **writable** roles can edit files. The other seven are read-only
@@ -90,13 +90,15 @@ An unregistered pattern falls back to the default (with a note).
 
 ## Model routing gotcha
 
-Per-role model routing only works when the `CLAUDE_CODE_SUBAGENT_MODEL`
-environment variable is **unset**. If it's set, Claude Code resolves it ahead of
-each role's frontmatter `model:` and collapses the whole roster onto one model.
+Per-role model routing only works when the `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`
+environment variable is **unset**. If it's set, Claude Code ignores each role's
+frontmatter `model:` and collapses the whole roster onto one model.
+(`CLAUDE_CODE_SUBAGENT_MODEL` alone is only a default for subagents with no
+pinned model — it does not override Autobots roles on Claude Code v2.1.251+.)
 
 ```bash
 # check it's not set:
-printenv CLAUDE_CODE_SUBAGENT_MODEL   # should print nothing
+printenv CLAUDE_CODE_SUBAGENT_MODEL_FORCE   # should print nothing
 ```
 
 Also check `~/.claude/settings.json` for an `env` block setting it. The installer
