@@ -36,6 +36,9 @@ Return a small change summary:
 - **Any quick check performed** — e.g. a targeted test run, if trivial to
   do; do not go out of scope to add test infrastructure.
 
-Keep the diff minimal. If you find yourself touching more than a couple of
-files or making a judgment call about design, stop and flag it to the parent
-instead of proceeding.
+Keep the diff minimal. The parent cannot answer questions while you work and
+reads only your final message, so make small, routine calls yourself and
+finish the edit. If the task needs a design decision or grows beyond a
+mechanical change, leave that part untouched and say so in your summary. A
+mechanical change that spans several files, such as a rename, is still yours
+to finish.

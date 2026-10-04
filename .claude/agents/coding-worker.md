@@ -23,8 +23,11 @@ Implement the task you are given, within the scope and constraints the
 parent assigns. This includes reading the surrounding code to understand
 conventions, making the edit(s), and — where the repository already has a
 test setup — running the relevant tests or a quick sanity check of your
-change. Stay inside the scope you were assigned; if the task turns out to be
-broader or riskier than briefed, say so rather than silently expanding it.
+change. Stay inside the scope you were assigned. The parent cannot answer
+questions while you work and reads only your final message, so make routine
+judgment calls yourself and finish the task as briefed. If part of it turns
+out to be broader or riskier than briefed, leave that part untouched, finish
+the rest, and say in your summary what you left and why.
 
 ## Output contract
 
