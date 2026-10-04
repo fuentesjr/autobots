@@ -109,9 +109,8 @@ tools: Read, Grep, Glob, Bash, WebFetch, WebSearch, Edit, Write, NotebookEdit
 `AGT-11` Each role's Markdown body MUST contain, at minimum:
 
 1. **Role responsibility** — a statement of the role's scope matching the Responsibility column of the design's Agent Roles table (e.g. `planner`: architecture, decomposition, sequencing, risk analysis).
-2. **Non-delegation clause** — an explicit statement that the role MUST NOT delegate, route, or spawn other agents, and that it returns findings/results to the parent, who is the orchestrator and DRA (Directly Responsible Agent).
-3. **Access clause** — for read-only roles, an explicit statement that the role MUST NOT modify files (convention-tier enforcement reinforcing the tool allowlist).
-4. **Output contract** — the structured form the role returns to the parent (findings list, report, patch summary, plan, etc.), appropriate to the role.
+2. **Access clause** — for read-only roles, an explicit statement that the role MUST NOT modify files (convention-tier enforcement reinforcing the tool allowlist).
+3. **Output contract** — the structured form the role returns to the parent (findings list, report, patch summary, plan, etc.), appropriate to the role.
 
 `AGT-12` Per-role body requirements (in addition to `AGT-11`):
 
@@ -142,7 +141,7 @@ tools: Read, Grep, Glob, Bash, WebFetch, WebSearch, Edit, Write, NotebookEdit
 
 `SKL-2` Escape hatches MUST take precedence over activation. If the user says any of `no subagents`, `do not use subagents`, `handle locally`, `do this yourself`, or `do not use autobots`, the parent MUST handle the task directly without dispatching.
 
-`SKL-3` The parent MUST act as the orchestrator and DRA. It MUST: select the subagent; assign concrete scope and constraints; sequence work and decide when to stop or continue; assign disjoint ownership for parallel writable work; resolve conflicts between subagent outputs; verify results and decide which findings/patches to accept; treat subagent output as advisory until accepted; and consolidate results, conflicts, verification, and remaining risks into the final response.
+`SKL-3` The parent MUST act as the orchestrator and DRA (Directly Responsible Agent). It MUST: select the subagent; assign concrete scope and constraints; sequence work and decide when to stop or continue; assign disjoint ownership for parallel writable work; resolve conflicts between subagent outputs; verify results and decide which findings/patches to accept; treat subagent output as advisory until accepted; and consolidate results, conflicts, verification, and remaining risks into the final response.
 
 `SKL-4` Subagents MUST NOT delegate or route. This invariant MUST be enforced structurally by omitting the `Agent` tool from every role (`AGT-10`), giving delegation depth of exactly one. This replaces Codex's `max_depth = 1`.
 
