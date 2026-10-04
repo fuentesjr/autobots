@@ -47,9 +47,9 @@ The two substitutions worth reading carefully are **access control** (Access Mod
 
 Autobots uses a **task-fit** mapping: every Claude tier is used for the work it suits best, rather than collapsing all flagship Agenticons roles onto a single model. Two rules follow from the work shape of each role.
 
-**Readers and analysts run a big model with deep reasoning.** Every role whose output gates correctness runs on Fable — the Mythos-class tier above Opus: `planner` (a bad decomposition wastes every worker-token that follows), `forensic-analyst`, `advisor`, and `edge-case-analyst` at `xhigh`, since each runs once per task and its job is exhaustive depth; and `reviewer` at `high`, since it runs after every change and higher effort in review trades precision for recall — a reviewer that pads each cycle with speculative findings costs triage time, which is a quality cost as well as a speed cost. `ultrathink` remains the per-dispatch escalation for a security-sensitive review.
+**Readers and analysts run a big model with deep reasoning.** Every role whose output gates correctness runs on Fable — the Mythos-class tier above Opus — at `high`: `planner` (a bad decomposition wastes every worker-token that follows), `forensic-analyst`, `advisor`, `edge-case-analyst`, and `reviewer`. The first four moved from `xhigh` on 2026-10-04: Anthropic's Fable 5.1 prompting guide says to start at `high` and to use `xhigh` only where a quality gain has been measured, and no Autobots measurement supported `xhigh` for these roles. The guide also reports that at `xhigh` Fable can draft a long deliverable in its thinking and then write it again. The move to `high` has not been measured on Autobots tasks either. `reviewer` was already at `high`, since it runs after every change and higher effort in review trades precision for recall — a reviewer that pads each cycle with speculative findings costs triage time, which is a quality cost as well as a speed cost. `ultrathink` remains the per-dispatch escalation for a security-sensitive review.
 
-**Executors run Opus at `medium`; Sonnet at `low` covers mechanical work.** Opus carries the execution-heavy roles: standard implementation (`coding-worker`, `medium`) and QA's long tool-call loops (`qa-engineer`, `high`, because its reasoning goes into judging what counts as a regression while its writes are throwaway scaffolding), plus `doc-reviewer` at `high`, whose semantic drift checks are judgment work. `coding-worker` and `qa-engineer` moved from Sonnet 5 on 2026-09-22: in Anthropic's testing, Opus 5.5 at `medium` matches or beats Opus 5 at `high` on coding, with fewer tokens per task. This has not yet been measured on Autobots tasks. Sonnet at `low` handles fast mechanical work (`fast-coding-worker`, `helper-worker`), where turn speed and cost are the point. Those two roles ran on Haiku 4.5 until 2026-09-22; they moved because Haiku 4.5 is eligible for retirement from October 15, 2026, has no successor, and has a February 2025 knowledge cutoff. The roster has no Haiku role.
+**Executors run Opus at `medium`; Sonnet covers mechanical work.** Opus carries the execution-heavy roles: standard implementation (`coding-worker`, `medium`) and QA's long tool-call loops (`qa-engineer`, `high`, because its reasoning goes into judging what counts as a regression while its writes are throwaway scaffolding), plus `doc-reviewer` at `high`, whose semantic drift checks are judgment work. `coding-worker` and `qa-engineer` moved from Sonnet 5 on 2026-09-22: in Anthropic's testing, Opus 5.5 at `medium` matches or beats Opus 5 at `high` on coding, with fewer tokens per task. This has not yet been measured on Autobots tasks. Sonnet handles fast mechanical work, where turn speed is the point: `fast-coding-worker` at `medium` and `helper-worker` at `low`. `fast-coding-worker` moved from `low` to `medium` on 2026-09-30, once cost stopped being a constraint: the claude-api model guide recommends `medium` for agentic coding and warns that `low` is more likely to skip verifying changes. A local 60-session eval on ten coding cases found no pass-rate difference (30/30 each) and 1.06× the median wall time. Those two roles ran on Haiku 4.5 until 2026-09-22; they moved because Haiku 4.5 is eligible for retirement from October 15, 2026, has no successor, and has a February 2025 knowledge cutoff. The roster has no Haiku role.
 
 | Role | Agenticons model | Claude alias | Resolves to (Claude Code 2.1.255+) |
 |---|---|---|---|
@@ -85,16 +85,16 @@ Autobots pins every role at step 2, so `CLAUDE_CODE_SUBAGENT_MODEL` by itself is
 
 | Role | Access | Model | Effort | Responsibility |
 |---|---|---:|---|---|
-| `planner` | read-only | Fable | xhigh | Architecture, decomposition, sequencing, risk analysis |
+| `planner` | read-only | Fable | high | Architecture, decomposition, sequencing, risk analysis |
 | `coding-worker` | writable | Opus | medium | Normal implementation, bug fixes, refactors |
-| `fast-coding-worker` | writable | Sonnet | low | Small localized edits and quick fixes |
+| `fast-coding-worker` | writable | Sonnet | medium | Small localized edits and quick fixes |
 | `helper-worker` | read-only | Sonnet | low | Quick lookup, repo reconnaissance, evidence gathering |
-| `forensic-analyst` | read-only | Fable | xhigh | Deep root-cause investigation, intermittent and cross-system failures, forensic reports |
+| `forensic-analyst` | read-only | Fable | high | Deep root-cause investigation, intermittent and cross-system failures, forensic reports |
 | `doc-reviewer` | read-only | Opus | high | Documentation correctness and drift review |
 | `reviewer` | read-only | Fable | high | Standard correctness, security, maintainability, regression review |
 | `qa-engineer` | writable | Opus | high | Exploratory QA verification: exercises changes end-to-end, probes regressions, performance, and user-facing rough edges |
-| `edge-case-analyst` | read-only | Fable | xhigh | Edge-case and coverage-gap discovery: finds unconsidered cases and specifies expected behavior and test cases |
-| `advisor` | read-only | Fable | xhigh | Guidance-only consultant for the advisory pattern: returns a plan, correction, or stop signal; never edits, never produces user-facing output |
+| `edge-case-analyst` | read-only | Fable | high | Edge-case and coverage-gap discovery: finds unconsidered cases and specifies expected behavior and test cases |
+| `advisor` | read-only | Fable | high | Guidance-only consultant for the advisory pattern: returns a plan, correction, or stop signal; never edits, never produces user-facing output |
 
 The roles, responsibilities, and read-only/writable split carry over from Agenticons' original nine, plus one Autobots-only addition, `advisor`, which exists for the advisory pattern and has no Agenticons counterpart. Effort levels are not a straight port, though: parity with Agenticons' `model_reasoning_effort` assignments was never a design goal, and they were tuned instead for the Claude model family and this package's own task-fit rationale (see Model Mapping). No role runs on Haiku: `helper-worker` on Sonnet at `low` effort is the floor for fast, mechanical work.
 
@@ -159,20 +159,20 @@ Agenticons sets a per-agent `model_reasoning_effort` (`low` → `xhigh`). Claude
 Two caveats shape the rendering:
 
 - **Haiku has no effort support.** The `effort` setting applies to the Fable, Opus, and Sonnet families; Haiku ignores it. The roster has no Haiku role — `helper-worker` on Sonnet at `low` effort is the floor for fast, mechanical work.
-- **An omitted `effort` inherits the session's level.** A role that leaves `effort` unset runs at whatever `/effort` the user's session is on (Claude Code's default is `high` for current Fable, Opus, and Sonnet models). Autobots therefore sets `effort` explicitly on every Fable/Opus/Sonnet role to encode the contract rather than lean on the session — including `coding-worker: medium` and `fast-coding-worker`/`helper-worker: low`, which must be explicit to avoid silently running at the session default.
+- **An omitted `effort` inherits the session's level.** A role that leaves `effort` unset runs at whatever `/effort` the user's session is on (Claude Code's default is `high` for current Fable, Opus, and Sonnet models). Autobots therefore sets `effort` explicitly on every Fable/Opus/Sonnet role to encode the contract rather than lean on the session — including `coding-worker`/`fast-coding-worker: medium` and `helper-worker: low`, which must be explicit to avoid silently running at the session default.
 
 | Role | Agenticons `model_reasoning_effort` | Autobots `effort:` |
 |---|---|---|
-| `fast-coding-worker` | `low` | `low` |
+| `fast-coding-worker` | `low` | `medium` |
 | `helper-worker` | `medium` | `low` |
 | `doc-reviewer` | `medium` | `high` |
 | `coding-worker` | `medium` | `medium` |
-| `planner` | `high` | `xhigh` |
+| `planner` | `high` | `high` |
 | `reviewer` | `high` | `high` |
 | `qa-engineer` | `high` | `high` |
-| `forensic-analyst` | `xhigh` | `xhigh` |
-| `edge-case-analyst` | `xhigh` | `xhigh` |
-| `advisor` | — (Autobots-only) | `xhigh` |
+| `forensic-analyst` | `xhigh` | `high` |
+| `edge-case-analyst` | `xhigh` | `high` |
+| `advisor` | — (Autobots-only) | `high` |
 
 The `ultrathink` keyword (recognized anywhere in a prompt body) remains available as a per-turn reinforcement for the deepest roles, and the user's session `/effort` still applies on top; neither is required, since `effort:` carries the contract.
 
@@ -247,7 +247,7 @@ Parallel writable work uses disjoint ownership. Where two writable workers might
 
 The [advisory pattern](https://claude.com/blog/the-advisor-strategy) inverts the default: a cost-effective executor drives the whole task end-to-end and escalates to a stronger model only at decision points it cannot reasonably resolve. The advisor never edits files and never produces user-facing output — it returns a plan, a correction, or a stop signal, and the executor resumes. The pattern trades peak capability for cost; Anthropic reports Sonnet with an Opus advisor scoring 2.7 percentage points higher on SWE-bench Multilingual than Sonnet alone at 11.9% lower cost per task.
 
-**Roles.** One writable executor — `coding-worker` (Opus) for normal work, or `fast-coding-worker` (Sonnet at `low`) for maximum cost reduction — plus the read-only `advisor` role (Fable, `xhigh`).
+**Roles.** One writable executor — `coding-worker` (Opus) for normal work, or `fast-coding-worker` (Sonnet at `medium`) for small localized edits — plus the read-only `advisor` role (Fable, `high`).
 
 **Flow (parent-mediated).**
 

@@ -35,16 +35,16 @@ Distribution: **5 Fable · 3 Opus · 2 Sonnet · 0 Haiku**.
 
 | Role | Model | Effort | Access | Reach for it when… |
 |---|---|---|---|---|
-| `planner` | Fable | xhigh | read-only | you need architecture, decomposition, sequencing, risk analysis before code |
+| `planner` | Fable | high | read-only | you need architecture, decomposition, sequencing, risk analysis before code |
 | `coding-worker` | Opus | medium | **writable** | normal-scope implementation, bug fixes, refactors |
-| `fast-coding-worker` | Sonnet | low | **writable** | small, localized, low-risk edits / quick fixes |
+| `fast-coding-worker` | Sonnet | medium | **writable** | small, localized, low-risk edits / quick fixes |
 | `helper-worker` | Sonnet | low | read-only | quick lookup, repo recon, evidence gathering before editing |
-| `forensic-analyst` | Fable | xhigh | read-only | deep root-cause on hard/intermittent/cross-system bugs |
+| `forensic-analyst` | Fable | high | read-only | deep root-cause on hard/intermittent/cross-system bugs |
 | `doc-reviewer` | Opus | high | read-only | documentation correctness / drift review |
 | `reviewer` | Fable | high | read-only | correctness, security, maintainability, regression review |
 | `qa-engineer` | Opus | high | **writable** | exercise a change end-to-end (regressions, perf, UX rough edges) |
-| `edge-case-analyst` | Fable | xhigh | read-only | find uncovered cases + propose specs and concrete test cases |
-| `advisor` | Fable | xhigh | read-only | guidance-only consultant for the advisory pattern (plan / correction / stop) |
+| `edge-case-analyst` | Fable | high | read-only | find uncovered cases + propose specs and concrete test cases |
+| `advisor` | Fable | high | read-only | guidance-only consultant for the advisory pattern (plan / correction / stop) |
 
 Only the three **writable** roles can edit files. The other seven are read-only
 (they can still run read-only shell inspection). No role can spawn another

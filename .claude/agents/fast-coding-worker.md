@@ -9,7 +9,7 @@ description: >-
   risk. This is also the default cost-minimizing executor for the advisory
   pattern.
 model: sonnet
-effort: low
+effort: medium
 color: yellow
 tools: Read, Grep, Glob, Bash, WebFetch, WebSearch, Edit, Write, NotebookEdit
 ---

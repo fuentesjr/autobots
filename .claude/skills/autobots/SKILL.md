@@ -161,8 +161,8 @@ when the user wants a cost-effective executor that escalates to a stronger
 model only at hard decision points.
 
 **Roles (ADV-1).** Exactly one writable executor — `coding-worker` (Opus,
-normal work) or `fast-coding-worker` (Sonnet at `low`, maximum cost reduction) — plus
-the read-only `advisor` (Fable, `xhigh`).
+normal work) or `fast-coding-worker` (Sonnet at `medium`, small localized edits) — plus
+the read-only `advisor` (Fable, `high`).
 
 **The loop is parent-mediated (ADV-2).** Executors must never consult the
 advisor directly — they have no `Agent` tool, so a direct consult is

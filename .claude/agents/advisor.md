@@ -9,7 +9,7 @@ description: >-
   never a patch, never user-facing prose. It does not investigate broadly on
   its own initiative; it answers the specific decision point it was handed.
 model: fable
-effort: xhigh
+effort: high
 color: red
 tools: Read, Grep, Glob, Bash, WebFetch, WebSearch
 ---

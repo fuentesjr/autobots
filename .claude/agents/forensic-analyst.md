@@ -8,7 +8,7 @@ description: >-
   quick fact-finding, and route the confirmed root cause to coding-worker or
   fast-coding-worker once this agent has identified it.
 model: fable
-effort: xhigh
+effort: high
 color: purple
 tools: Read, Grep, Glob, Bash, WebFetch, WebSearch
 ---

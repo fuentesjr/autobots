@@ -52,16 +52,16 @@ This document is the **normative, buildable contract** for the Autobots package.
 
 | Role | Access | `model` alias | `effort` | Resolves to (Claude Code 2.1.255+) |
 |---|---|---|---|---|
-| `planner` | read-only | `fable` | `xhigh` | Fable 5.1 |
+| `planner` | read-only | `fable` | `high` | Fable 5.1 |
 | `coding-worker` | writable | `opus` | `medium` | Opus 5.5 |
-| `fast-coding-worker` | writable | `sonnet` | `low` | Sonnet 5.5 |
+| `fast-coding-worker` | writable | `sonnet` | `medium` | Sonnet 5.5 |
 | `helper-worker` | read-only | `sonnet` | `low` | Sonnet 5.5 |
-| `forensic-analyst` | read-only | `fable` | `xhigh` | Fable 5.1 |
+| `forensic-analyst` | read-only | `fable` | `high` | Fable 5.1 |
 | `doc-reviewer` | read-only | `opus` | `high` | Opus 5.5 |
 | `reviewer` | read-only | `fable` | `high` | Fable 5.1 |
 | `qa-engineer` | writable | `opus` | `high` | Opus 5.5 |
-| `edge-case-analyst` | read-only | `fable` | `xhigh` | Fable 5.1 |
-| `advisor` | read-only | `fable` | `xhigh` | Fable 5.1 |
+| `edge-case-analyst` | read-only | `fable` | `high` | Fable 5.1 |
+| `advisor` | read-only | `fable` | `high` | Fable 5.1 |
 
 `AGT-2` Model distribution MUST be **5 Fable** (`planner`, `forensic-analyst`, `reviewer`, `edge-case-analyst`, `advisor`) · **3 Opus** (`coding-worker`, `doc-reviewer`, `qa-engineer`) · **2 Sonnet** (`fast-coding-worker`, `helper-worker`) · **0 Haiku**.
 
@@ -171,7 +171,7 @@ tools: Read, Grep, Glob, Bash, WebFetch, WebSearch, Edit, Write, NotebookEdit
 
 ## 8. Advisory Pattern Protocol
 
-`ADV-1` The `advisory` pattern MUST use exactly one writable executor — `coding-worker` (Opus, normal work) or `fast-coding-worker` (Sonnet at `low`, maximum cost reduction) — plus the read-only `advisor` role (Fable, `xhigh`).
+`ADV-1` The `advisory` pattern MUST use exactly one writable executor — `coding-worker` (Opus, normal work) or `fast-coding-worker` (Sonnet at `medium`, small localized edits) — plus the read-only `advisor` role (Fable, `high`).
 
 `ADV-2` The loop MUST be **parent-mediated**. Executors MUST NOT consult the advisor directly, because the type-restricted `Agent(advisor)` allowlist syntax is ignored when an agent runs as a subagent; granting `Agent` would break the depth-1 invariant (`SKL-4`).
 

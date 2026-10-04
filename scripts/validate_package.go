@@ -809,16 +809,16 @@ type rosterEntry struct {
 // change: update the spec table and every doc the validator checks in the
 // same commit.
 var expectedRoster = map[string]rosterEntry{
-	"planner":            {model: "fable", effort: "xhigh", writable: false},
+	"planner":            {model: "fable", effort: "high", writable: false},
 	"coding-worker":      {model: "opus", effort: "medium", writable: true},
-	"fast-coding-worker": {model: "sonnet", effort: "low", writable: true},
+	"fast-coding-worker": {model: "sonnet", effort: "medium", writable: true},
 	"helper-worker":      {model: "sonnet", effort: "low", writable: false},
-	"forensic-analyst":   {model: "fable", effort: "xhigh", writable: false},
+	"forensic-analyst":   {model: "fable", effort: "high", writable: false},
 	"doc-reviewer":       {model: "opus", effort: "high", writable: false},
 	"reviewer":           {model: "fable", effort: "high", writable: false},
 	"qa-engineer":        {model: "opus", effort: "high", writable: true},
-	"edge-case-analyst":  {model: "fable", effort: "xhigh", writable: false},
-	"advisor":            {model: "fable", effort: "xhigh", writable: false},
+	"edge-case-analyst":  {model: "fable", effort: "high", writable: false},
+	"advisor":            {model: "fable", effort: "high", writable: false},
 }
 
 func checkVAL14(specs []*agentSpec) {

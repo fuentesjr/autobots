@@ -8,7 +8,7 @@ description: >-
   write the tests or the fix itself. Route confirmed cases to coding-worker
   or fast-coding-worker afterward.
 model: fable
-effort: xhigh
+effort: high
 color: magenta
 tools: Read, Grep, Glob, Bash, WebFetch, WebSearch
 ---

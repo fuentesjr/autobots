@@ -8,7 +8,7 @@ description: >-
   subsystems. Do not use it to write code or run commands that change state —
   it is read-only and returns a plan, not a patch.
 model: fable
-effort: xhigh
+effort: high
 color: blue
 tools: Read, Grep, Glob, Bash, WebFetch, WebSearch
 ---
