@@ -1,6 +1,6 @@
 # Autobots
 
-Autobots is a small, explicit delegation layer for Claude Code: a fixed, named roster of ten subagents — for planning, implementation, review, documentation review, investigation, edge-case analysis, and QA verification — each pinned to a deliberate Claude model tier. It is the Claude Code sibling of [Agenticons](https://github.com/fuentesjr/agenticons), which does the same thing for Codex custom subagents and GPT models. Agenticons routes to `.codex/agents/*.toml`; Autobots routes to `.claude/agents/*.md`. The delegation contract, orchestration model, and validation discipline carry over — only the runtime, spec format, and model roster change.
+Autobots is a small, explicit delegation layer for Claude Code: a fixed, named roster of eleven subagents — for planning, implementation, spec tests, review, documentation review, investigation, edge-case analysis, and QA verification — each pinned to a deliberate Claude model tier. It is the Claude Code sibling of [Agenticons](https://github.com/fuentesjr/agenticons), which does the same thing for Codex custom subagents and GPT models. Agenticons routes to `.codex/agents/*.toml`; Autobots routes to `.claude/agents/*.md`. The delegation contract, orchestration model, and validation discipline carry over — only the runtime, spec format, and model roster change.
 
 Autobots does not turn the parent agent into a workflow engine. The parent stays the orchestrator and the DRA (Directly Responsible Agent): it selects the subagent, assigns scope, sequences work, resolves conflicts, verifies results, and treats every subagent output as advisory until it accepts it.
 
@@ -12,7 +12,7 @@ Escape hatches always win over activation. If a user says any of `no subagents`,
 
 ## The roster and model mapping
 
-Every role is pinned to a Claude model family chosen for task fit. Roles whose output gates correctness run on Fable at `high`: `planner`, `forensic-analyst`, `advisor`, `edge-case-analyst`, and `reviewer`. Opus carries the execution-heavy and judgment roles: `coding-worker` at `medium` (standard implementation), `qa-engineer` at `high` (long tool-call loops), and `doc-reviewer` at `high` (semantic drift checks). Sonnet covers fast mechanical work: `fast-coding-worker` at `medium` (small edits) and `helper-worker` at `low` (quick lookups). Distribution across the ten roles: **5 Fable · 3 Opus · 2 Sonnet · 0 Haiku**.
+Every role is pinned to a Claude model family chosen for task fit. Roles whose output gates correctness run on Fable at `high`: `planner`, `forensic-analyst`, `advisor`, `edge-case-analyst`, and `reviewer`. Opus carries the execution-heavy and judgment roles: `coding-worker` at `medium` (standard implementation), `qa-engineer` at `high` (long tool-call loops), and `doc-reviewer` at `high` (semantic drift checks). Sonnet covers fast mechanical work: `fast-coding-worker` at `medium` (small edits) and `helper-worker` at `low` (quick lookups), plus `spec-test-writer` at `high` (spec tests written before implementation, on a model different from the implementer `coding-worker`). Distribution across the eleven roles: **5 Fable · 3 Opus · 3 Sonnet · 0 Haiku**.
 
 | Role | Model (alias → resolves to) | Access | Effort |
 |---|---|---|---|
@@ -26,10 +26,11 @@ Every role is pinned to a Claude model family chosen for task fit. Roles whose o
 | `qa-engineer` | `opus` → Opus 5.5 | writable | high |
 | `edge-case-analyst` | `fable` → Fable 5.1 | read-only | high |
 | `advisor` | `fable` → Fable 5.1 | read-only | high |
+| `spec-test-writer` | `sonnet` → Sonnet 5.5 | writable | high |
 
 Each role's `model:` is a family alias (`fable`, `opus`, `sonnet`), not a versioned ID, so a role always runs the newest model Claude Code knows for that family: when a new Fable ships and Claude Code re-points the alias, every Fable role moves with it, with no roster edit. Autobots assumes the Anthropic API provider; other providers (Bedrock, Google Cloud, Foundry, Claude Platform on AWS) can resolve the same alias to an older model — see [Claude Code's alias table](https://code.claude.com/docs/en/model-config#model-aliases). The "resolves to" column is what those aliases meant on Claude Code 2.1.255 or later (before 2.1.255, `fable` meant Fable 5). Two things can make an alias resolve to something else: an older Claude Code build, and an `ANTHROPIC_DEFAULT_FABLE_MODEL`/`_OPUS_MODEL`/`_SONNET_MODEL` environment variable, which redirects the alias outright. The installer warns on both. To see what an alias resolves to today, run `claude -p --model sonnet --output-format json "ok" | jq '.modelUsage | keys'`; the model IDs a routing-gate run actually tested are recorded as `resolved_models` in its `evals/results/*.json` file. Every role also sets `effort` explicitly rather than inheriting the session's effort level. No role runs on Haiku.
 
-Only three roles are writable — `coding-worker`, `fast-coding-worker`, `qa-engineer` — and can edit files. The other seven are read-only by construction: their `tools:` allowlist withholds `Edit`, `Write`, and `NotebookEdit`. No role is ever granted the `Agent` tool, so no subagent can spawn another subagent — delegation is exactly one level deep, and every result returns to the parent.
+Only four roles are writable — `coding-worker`, `fast-coding-worker`, `qa-engineer`, `spec-test-writer` — and can edit files (`spec-test-writer` edits only test files and test fixtures). The other seven are read-only by construction: their `tools:` allowlist withholds `Edit`, `Write`, and `NotebookEdit`. No role is ever granted the `Agent` tool, so no subagent can spawn another subagent — delegation is exactly one level deep, and every result returns to the parent.
 
 ## Caveat: `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` must be unset
 
@@ -40,7 +41,7 @@ Claude Code resolves a subagent's model in this order, first match wins:
 3. the `CLAUDE_CODE_SUBAGENT_MODEL` environment variable
 4. the main conversation's model
 
-Autobots pins every role at step 2, so `CLAUDE_CODE_SUBAGENT_MODEL` on its own does not touch the roster — it is only a default for subagents that declare no model. **`CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1` is different: it makes Claude Code ignore the `model:` field of every subagent definition and run them all on `CLAUDE_CODE_SUBAGENT_MODEL` (or on the main conversation's model when that is unset), collapsing the entire ten-role roster onto a single model.** The per-role routing table above — the whole point of Autobots — holds only when `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is **unset**. It is easy to have it set globally in `~/.claude/settings.json` for unrelated reasons and forget it is there.
+Autobots pins every role at step 2, so `CLAUDE_CODE_SUBAGENT_MODEL` on its own does not touch the roster — it is only a default for subagents that declare no model. **`CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1` is different: it makes Claude Code ignore the `model:` field of every subagent definition and run them all on `CLAUDE_CODE_SUBAGENT_MODEL` (or on the main conversation's model when that is unset), collapsing the entire eleven-role roster onto a single model.** The per-role routing table above — the whole point of Autobots — holds only when `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is **unset**. It is easy to have it set globally in `~/.claude/settings.json` for unrelated reasons and forget it is there.
 
 Before relying on Autobots' model-tier routing:
 
@@ -64,7 +65,7 @@ The installer is `scripts/install.sh`. It accepts:
 | `--symlink` | Symlink the skill directory and each agent file to this checkout instead of copying them. Local-checkout mode only — errors in remote installs. |
 | `--ref <git-ref>` | When installing remotely, pull from a specific Git ref instead of the default branch. |
 
-It writes the dispatcher skill to `.claude/skills/autobots/SKILL.md` and the ten agent files to `.claude/agents/<name>.md` (or their `~/.claude` equivalents under `--global`).
+It writes the dispatcher skill to `.claude/skills/autobots/SKILL.md` and the eleven agent files to `.claude/agents/<name>.md` (or their `~/.claude` equivalents under `--global`).
 
 **From a local checkout:**
 
@@ -96,7 +97,7 @@ Autobots is distributed as files copied directly into `.claude/` (or `~/.claude/
 
 Roles are the primitives; patterns are parent-side recipes for composing them. Autobots ships a small pattern registry:
 
-- **`orchestrator-worker` (default)** — the classic pattern: the parent delegates bounded subtasks to any of the ten roles, receives findings or results back, and synthesizes the final result. This is the default whenever autobots dispatch is triggered and no other pattern is named. Common recipes: plan → implement → review (`planner` → `coding-worker` → `reviewer`); fast fix (`fast-coding-worker`, plus `reviewer` on behavior/API changes); investigate before editing (`helper-worker` → a worker); deep root-cause (`forensic-analyst` → `coding-worker`); documentation drift (`doc-reviewer`); high-stakes review (`reviewer`); exploratory QA (`qa-engineer`); edge-case coverage (`edge-case-analyst`).
+- **`orchestrator-worker` (default)** — the classic pattern: the parent delegates bounded subtasks to any of the eleven roles, receives findings or results back, and synthesizes the final result. This is the default whenever autobots dispatch is triggered and no other pattern is named. Common recipes: plan → implement → review (`planner` → `coding-worker` → `reviewer`); fast fix (`fast-coding-worker`, plus `reviewer` on behavior/API changes); investigate before editing (`helper-worker` → a worker); deep root-cause (`forensic-analyst` → `coding-worker`); documentation drift (`doc-reviewer`); high-stakes review (`reviewer`); exploratory QA (`qa-engineer`); edge-case coverage (`edge-case-analyst`); spec first (`spec-test-writer` → `coding-worker` → `reviewer`, so tests and code come from different models).
 - **`advisory`** — triggered by `use the advisor strategy`, `advisory pattern`, or an explicit ask for a cheap executor paired with an advisor. One writable executor (`coding-worker` or `fast-coding-worker`) does the work end-to-end and escalates to `advisor` only at decision points it cannot reasonably resolve; the loop is parent-mediated and capped at 3 consults per task by default.
 
 A request for an unregistered pattern falls back to `orchestrator-worker`, with a note to the user. See `docs/design.md` for the full pattern contract and `docs/faq.md` for a practical walkthrough of the advisory consult loop.

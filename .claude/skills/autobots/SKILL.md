@@ -90,6 +90,7 @@ label is what the user sees.
 - `qa-engineer` — exploratory end-to-end QA verification (writable)
 - `edge-case-analyst` — edge-case and coverage-gap discovery (read-only)
 - `advisor` — guidance-only consultant for the advisory pattern (read-only)
+- `spec-test-writer` — spec tests written from requirements before implementation (writable, test files only)
 
 Every subagent above is spawned via the `Agent` tool with `subagent_type: <name>`
 matching its `.claude/agents/<name>.md` file. Each role is pinned to its own
@@ -140,6 +141,18 @@ back, and decide whether to proceed, redo, or stop before moving on.
 - **Edge-case / coverage analysis.** `edge-case-analyst` surfaces uncovered
   cases with proposed specs and concrete test cases; route confirmed cases
   to `coding-worker` or `fast-coding-worker`.
+- **Spec first.** `spec-test-writer` → `coding-worker` → `reviewer`, for
+  features and public API contract changes. Give `spec-test-writer` the
+  requirements, plans, issues, and interface, but not the planned
+  implementation; strip any implementation approach from `planner` output
+  before passing it on. Check that its files-touched list and the diff
+  contain only test files and test fixtures. If it flags a public API
+  contract change, get the user's approval of those tests before
+  implementation. Route implementation to `coding-worker`, not
+  `fast-coding-worker`, so the tests and the code come from different
+  models, and tell `coding-worker` not to edit the spec tests: if it thinks
+  one is wrong, it reports why. Decide each such report yourself or ask the
+  user; never let the implementer change what passing means.
 
 **Report-producing roles.** `forensic-analyst` and `edge-case-analyst` return
 reports, not files. Save an accepted report to disk **only if the user asks
@@ -147,7 +160,7 @@ for it** — otherwise fold the findings into your response and route
 confirmed follow-ups to a worker.
 
 **Parallel writable work.** When two writable workers (`coding-worker`,
-`fast-coding-worker`, `qa-engineer`) run in parallel, give each disjoint
+`fast-coding-worker`, `qa-engineer`, `spec-test-writer`) run in parallel, give each disjoint
 ownership (non-overlapping files/scopes) or spawn them with
 `isolation: worktree` for a stronger guarantee. Parallel review work should
 use distinct review angles (e.g. correctness vs. security vs. regression

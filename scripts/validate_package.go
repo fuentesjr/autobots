@@ -792,7 +792,7 @@ func checkVAL12(readme, skill, faq, cheatsheet string, names []string) {
 
 // ---------------------------------------------------------------------------
 // VAL-14: the on-disk roster matches the normative table in docs/spec.md §3
-// exactly — the same ten role names and, per role, the pinned model, effort,
+// exactly — the same eleven role names and, per role, the pinned model, effort,
 // and derived access class (AGT-1, ART-3). The other checks derive the
 // roster from disk; this one keeps disk honest against the spec, so a role
 // cannot be added, dropped, or moved to another tier without a deliberate
@@ -819,6 +819,7 @@ var expectedRoster = map[string]rosterEntry{
 	"qa-engineer":        {model: "opus", effort: "high", writable: true},
 	"edge-case-analyst":  {model: "fable", effort: "high", writable: false},
 	"advisor":            {model: "fable", effort: "high", writable: false},
+	"spec-test-writer":   {model: "sonnet", effort: "high", writable: true},
 }
 
 func checkVAL14(specs []*agentSpec) {

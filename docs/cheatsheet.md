@@ -4,7 +4,7 @@ Quick reference for using the Autobots delegation skill in Claude Code. For the
 full contract see [`docs/spec.md`](./spec.md); for rationale see
 [`docs/design.md`](./design.md).
 
-Autobots gives you a fixed roster of ten named subagents, each pinned to a
+Autobots gives you a fixed roster of eleven named subagents, each pinned to a
 deliberate Claude model tier. You (the parent) stay the orchestrator — subagents
 return findings/results, and you decide what to accept.
 
@@ -29,9 +29,9 @@ ask for delegation explicitly.
 
 ---
 
-## The roster (ten roles)
+## The roster (eleven roles)
 
-Distribution: **5 Fable · 3 Opus · 2 Sonnet · 0 Haiku**.
+Distribution: **5 Fable · 3 Opus · 3 Sonnet · 0 Haiku**.
 
 | Role | Model | Effort | Access | Reach for it when… |
 |---|---|---|---|---|
@@ -45,8 +45,9 @@ Distribution: **5 Fable · 3 Opus · 2 Sonnet · 0 Haiku**.
 | `qa-engineer` | Opus | high | **writable** | exercise a change end-to-end (regressions, perf, UX rough edges) |
 | `edge-case-analyst` | Fable | high | read-only | find uncovered cases + propose specs and concrete test cases |
 | `advisor` | Fable | high | read-only | guidance-only consultant for the advisory pattern (plan / correction / stop) |
+| `spec-test-writer` | Sonnet | high | **writable** | write spec tests from requirements before implementation (edits only test files and fixtures) |
 
-Only the three **writable** roles can edit files. The other seven are read-only
+Only the four **writable** roles can edit files. The other seven are read-only
 (they can still run read-only shell inspection). No role can spawn another
 subagent — delegation is exactly one level deep.
 
@@ -69,6 +70,7 @@ An unregistered pattern falls back to the default (with a note).
 - **Deep root-cause:** `forensic-analyst` → `coding-worker`
 - **Doc drift:** `doc-reviewer`
 - **High-stakes / security review:** `reviewer`
+- **Spec first:** `spec-test-writer` → `coding-worker` → `reviewer` (tests and code come from different models)
 - **Exploratory QA:** `qa-engineer` after a feature lands → route confirmed findings to a worker
 - **Edge-case / coverage:** `edge-case-analyst` → route confirmed cases to a worker
 

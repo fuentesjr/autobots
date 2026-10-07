@@ -2,7 +2,7 @@
 
 ## What is Autobots? How is it different from just using subagents directly?
 
-Autobots is a fixed, named roster of ten Claude Code subagents — `planner`, `coding-worker`, `fast-coding-worker`, `helper-worker`, `forensic-analyst`, `doc-reviewer`, `reviewer`, `qa-engineer`, `edge-case-analyst`, and `advisor` — each with a pinned model tier, a pinned reasoning effort, a fixed access class (read-only or writable), and a defined output contract. You could hand-roll ad hoc subagents in any project, but you'd be redeciding the model, the tool allowlist, and the responsibilities every time. Autobots ships that roster once, as files, so every project that installs it gets the same consistent routing: the same task always lands on the same role, running the same model, with the same guardrails. It's the Claude Code counterpart to [Agenticons](https://github.com/fuentesjr/agenticons), which does the same thing for Codex.
+Autobots is a fixed, named roster of eleven Claude Code subagents — `planner`, `coding-worker`, `fast-coding-worker`, `helper-worker`, `forensic-analyst`, `doc-reviewer`, `reviewer`, `qa-engineer`, `edge-case-analyst`, `advisor`, and `spec-test-writer` — each with a pinned model tier, a pinned reasoning effort, a fixed access class (read-only or writable), and a defined output contract. You could hand-roll ad hoc subagents in any project, but you'd be redeciding the model, the tool allowlist, and the responsibilities every time. Autobots ships that roster once, as files, so every project that installs it gets the same consistent routing: the same task always lands on the same role, running the same model, with the same guardrails. It's the Claude Code counterpart to [Agenticons](https://github.com/fuentesjr/agenticons), which does the same thing for Codex.
 
 ## How do I trigger it? How do I turn it off?
 
@@ -10,7 +10,7 @@ Dispatch is opt-in — it never fires automatically. Ask explicitly for one of: 
 
 Escape hatches always win, even if your request otherwise sounds like an autobots task. Say any of: `no subagents`, `do not use subagents`, `handle locally`, `do this yourself`, or `do not use autobots`, and the parent handles the task itself without dispatching to any role.
 
-## What are the ten roles, and when does each get used?
+## What are the eleven roles, and when does each get used?
 
 | Role | Used for |
 |---|---|
@@ -24,18 +24,19 @@ Escape hatches always win, even if your request otherwise sounds like an autobot
 | `qa-engineer` | Exploratory QA that exercises a change end-to-end after it lands — regressions, performance, UX rough edges. Writable (it may edit to scaffold verification), but it returns findings, not a merged feature. |
 | `edge-case-analyst` | Coverage-gap discovery: finds cases nobody considered and proposes concrete specs and test cases. Read-only. |
 | `advisor` | Guidance-only consultant for the `advisory` pattern. Returns exactly one of a plan, a correction, or a stop signal. Read-only; never edits; never produces user-facing output. |
+| `spec-test-writer` | Writes spec tests from requirements, plans, issues, and the interface before implementation, for features and public API contract changes. Never sees the planned implementation; edits only test files and test fixtures; confirms each test fails for the right reason before implementation. Writable. |
 
-A typical flow chains a few of these: `planner` → `coding-worker` → `reviewer` is the default plan/implement/review recipe. `helper-worker` often runs first when the parent needs facts before deciding scope.
+A typical flow chains a few of these: `planner` → `coding-worker` → `reviewer` is the default plan/implement/review recipe, and `spec-test-writer` → `coding-worker` → `reviewer` is the spec-first recipe (implementation goes to `coding-worker`, not `fast-coding-worker`, so tests and code come from different models). `helper-worker` often runs first when the parent needs facts before deciding scope.
 
 ## Why is per-role model routing broken if `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is set?
 
-Claude Code resolves a subagent's model in a fixed precedence order: a per-invocation `model` parameter, then the frontmatter `model:` field that pins each Autobots role to its intended tier, then the `CLAUDE_CODE_SUBAGENT_MODEL` environment variable, then the main conversation's model. Because every Autobots role pins its model in frontmatter, `CLAUDE_CODE_SUBAGENT_MODEL` by itself is harmless — it only fills in for subagents that declare no model. `CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1` is the problem: while it is set, Claude Code ignores the `model:` field of every subagent definition, so every role — `planner`, `coding-worker`, `fast-coding-worker`, `helper-worker`, `forensic-analyst`, `doc-reviewer`, `reviewer`, `qa-engineer`, `edge-case-analyst`, and `advisor` alike — silently collapses onto whatever single model `CLAUDE_CODE_SUBAGENT_MODEL` names (or the main conversation's model), regardless of what its `.md` spec says. There is no error at dispatch time; the roster just quietly stops being a roster. `scripts/install.sh` checks for this variable and warns if it's set, and `README.md` documents the fix: unset it before relying on per-role routing. On Claude Code older than v2.1.251, `CLAUDE_CODE_SUBAGENT_MODEL` itself overrode frontmatter, so unset that too if you are on an old version.
+Claude Code resolves a subagent's model in a fixed precedence order: a per-invocation `model` parameter, then the frontmatter `model:` field that pins each Autobots role to its intended tier, then the `CLAUDE_CODE_SUBAGENT_MODEL` environment variable, then the main conversation's model. Because every Autobots role pins its model in frontmatter, `CLAUDE_CODE_SUBAGENT_MODEL` by itself is harmless — it only fills in for subagents that declare no model. `CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1` is the problem: while it is set, Claude Code ignores the `model:` field of every subagent definition, so every role — `planner`, `coding-worker`, `fast-coding-worker`, `helper-worker`, `forensic-analyst`, `doc-reviewer`, `reviewer`, `qa-engineer`, `edge-case-analyst`, `advisor`, and `spec-test-writer` alike — silently collapses onto whatever single model `CLAUDE_CODE_SUBAGENT_MODEL` names (or the main conversation's model), regardless of what its `.md` spec says. There is no error at dispatch time; the roster just quietly stops being a roster. `scripts/install.sh` checks for this variable and warns if it's set, and `README.md` documents the fix: unset it before relying on per-role routing. On Claude Code older than v2.1.251, `CLAUDE_CODE_SUBAGENT_MODEL` itself overrode frontmatter, so unset that too if you are on an old version.
 
 ## What patterns exist? How does the advisory consult loop work?
 
 Autobots ships two registered patterns:
 
-- **`orchestrator-worker` (default)** — used for any autobots dispatch that doesn't name another pattern. The parent delegates bounded subtasks to whichever of the ten roles fits, gets results back, and synthesizes the final answer itself.
+- **`orchestrator-worker` (default)** — used for any autobots dispatch that doesn't name another pattern. The parent delegates bounded subtasks to whichever of the eleven roles fits, gets results back, and synthesizes the final answer itself.
 - **`advisory`** — triggered by `use the advisor strategy`, `advisory pattern`, or an explicit ask for a cheap executor paired with an advisor. It pairs one writable executor (`coding-worker` for normal work, or `fast-coding-worker` for the fastest turns) with the read-only `advisor` role.
 
 The advisory loop is **parent-mediated**, not peer-to-peer: the executor cannot call `advisor` directly, because the type-restricted `Agent(advisor)` allowlist syntax is ignored once an agent is itself running as a subagent, and granting the executor the `Agent` tool at all would break the one-level-deep delegation invariant every role must respect. So instead:
@@ -55,7 +56,7 @@ Autobots closes that gap in tiers, weakest to strongest: (1) the system-prompt c
 
 ## Why file-based distribution instead of a plugin?
 
-Claude Code plugins bundle `agents/` and `skills/` behind a marketplace manifest for one-command installation, which is convenient — but plugin subagents **silently ignore `hooks`, `mcpServers`, and `permissionMode`**. Since Autobots' strongest read-only guarantee (the `PreToolUse` write-guard described above) depends on `hooks`, shipping as a plugin would quietly weaken that guarantee with no error to warn you. File-based distribution — copying `SKILL.md` and the ten agent files directly into `.claude/` or `~/.claude/` via `scripts/install.sh` — is the only form where that enforcement can actually run, so it's Autobots' distribution model.
+Claude Code plugins bundle `agents/` and `skills/` behind a marketplace manifest for one-command installation, which is convenient — but plugin subagents **silently ignore `hooks`, `mcpServers`, and `permissionMode`**. Since Autobots' strongest read-only guarantee (the `PreToolUse` write-guard described above) depends on `hooks`, shipping as a plugin would quietly weaken that guarantee with no error to warn you. File-based distribution — copying `SKILL.md` and the eleven agent files directly into `.claude/` or `~/.claude/` via `scripts/install.sh` — is the only form where that enforcement can actually run, so it's Autobots' distribution model.
 
 ## How do I add or change a role?
 

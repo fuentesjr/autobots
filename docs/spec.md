@@ -28,6 +28,7 @@ This document is the **normative, buildable contract** for the Autobots package.
 | `qa-engineer` agent | `.claude/agents/qa-engineer.md` | `~/.claude/agents/qa-engineer.md` | §4 |
 | `edge-case-analyst` agent | `.claude/agents/edge-case-analyst.md` | `~/.claude/agents/edge-case-analyst.md` | §4 |
 | `advisor` agent | `.claude/agents/advisor.md` | `~/.claude/agents/advisor.md` | §4 |
+| `spec-test-writer` agent | `.claude/agents/spec-test-writer.md` | `~/.claude/agents/spec-test-writer.md` | §4 |
 
 `ART-2` The package MUST include these supporting (non-installed) files in the repository:
 
@@ -42,13 +43,13 @@ This document is the **normative, buildable contract** for the Autobots package.
 | `README.md` | Overview + model mapping + `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` caveat | `VAL-7`, `VAL-8`, `VAL-12`, `MDL-3` |
 | `.github/workflows/validate.yml` | CI running the acceptance commands (§11) | `ACC-4` |
 
-`ART-3` There MUST be exactly ten agent files under `.claude/agents/`, one per role in §3. The installer, `SKILL.md`, `README.md`, `docs/design.md`, `docs/faq.md`, and `docs/cheatsheet.md` MUST reference the same ten role names (enforced by `VAL-7`, `VAL-9`, `VAL-11`, `VAL-14`).
+`ART-3` There MUST be exactly eleven agent files under `.claude/agents/`, one per role in §3. The installer, `SKILL.md`, `README.md`, `docs/design.md`, `docs/faq.md`, and `docs/cheatsheet.md` MUST reference the same eleven role names (enforced by `VAL-7`, `VAL-9`, `VAL-11`, `VAL-14`).
 
 `ART-4` The package MUST be distributed **file-based** (copied directly into `.claude/` or `~/.claude/`), MUST NOT be shipped as a Claude Code plugin as the primary distribution unit, because plugin subagents silently ignore `hooks`, `mcpServers`, and `permissionMode`. **[Deferred]** An additional plugin distribution MAY be published later, documented as not supporting hook-enforced read-only.
 
 ## 3. Agent Roster
 
-`AGT-1` The roster MUST be exactly these ten roles with exactly these attributes:
+`AGT-1` The roster MUST be exactly these eleven roles with exactly these attributes:
 
 | Role | Access | `model` alias | `effort` | Resolves to (Claude Code 2.1.255+) |
 |---|---|---|---|---|
@@ -62,10 +63,11 @@ This document is the **normative, buildable contract** for the Autobots package.
 | `qa-engineer` | writable | `opus` | `high` | Opus 5.5 |
 | `edge-case-analyst` | read-only | `fable` | `high` | Fable 5.1 |
 | `advisor` | read-only | `fable` | `high` | Fable 5.1 |
+| `spec-test-writer` | writable | `sonnet` | `high` | Sonnet 5.5 |
 
-`AGT-2` Model distribution MUST be **5 Fable** (`planner`, `forensic-analyst`, `reviewer`, `edge-case-analyst`, `advisor`) · **3 Opus** (`coding-worker`, `doc-reviewer`, `qa-engineer`) · **2 Sonnet** (`fast-coding-worker`, `helper-worker`) · **0 Haiku**.
+`AGT-2` Model distribution MUST be **5 Fable** (`planner`, `forensic-analyst`, `reviewer`, `edge-case-analyst`, `advisor`) · **3 Opus** (`coding-worker`, `doc-reviewer`, `qa-engineer`) · **3 Sonnet** (`fast-coding-worker`, `helper-worker`, `spec-test-writer`) · **0 Haiku**.
 
-`AGT-3` Exactly three roles MUST be writable: `coding-worker`, `fast-coding-worker`, `qa-engineer`. All other seven roles MUST be read-only.
+`AGT-3` Exactly four roles MUST be writable: `coding-worker`, `fast-coding-worker`, `qa-engineer`, `spec-test-writer`. All other seven roles MUST be read-only.
 
 ## 4. Per-Agent Spec Contract
 
@@ -94,7 +96,7 @@ This document is the **normative, buildable contract** for the Autobots package.
 tools: Read, Grep, Glob, Bash, WebFetch, WebSearch
 ```
 
-`AGT-8` Writable roles (`coding-worker`, `fast-coding-worker`, `qa-engineer`) MUST set the read-only list plus the editing tools:
+`AGT-8` Writable roles (`coding-worker`, `fast-coding-worker`, `qa-engineer`, `spec-test-writer`) MUST set the read-only list plus the editing tools:
 
 ```
 tools: Read, Grep, Glob, Bash, WebFetch, WebSearch, Edit, Write, NotebookEdit
@@ -126,6 +128,7 @@ tools: Read, Grep, Glob, Bash, WebFetch, WebSearch, Edit, Write, NotebookEdit
 | `qa-engineer` | Results of exercising the change end-to-end (regressions, performance, UX rough edges); it MAY edit to run/scaffold verification but returns findings to the parent. |
 | `edge-case-analyst` | A report of uncovered cases with proposed specs and concrete test cases; no edits. |
 | `advisor` | Guidance only — exactly one of a **plan**, a **correction**, or a **stop** signal (see §6); MUST NOT edit files and MUST NOT produce user-facing output. |
+| `spec-test-writer` | Spec tests written from requirements before implementation, each with its source requirement and the reason it failed on its first run; it MUST edit only test files and test fixtures. |
 
 ## 5. Model Routing
 
@@ -147,7 +150,7 @@ tools: Read, Grep, Glob, Bash, WebFetch, WebSearch, Edit, Write, NotebookEdit
 
 `SKL-5` In user-facing updates the parent SHOULD label each spawned subagent as `<role>: <task or scope>` (e.g. `helper-worker: dependency readiness review`). Any tool-generated agent id is traceability metadata only.
 
-`SKL-6` `SKILL.md` MUST contain an explicit dispatch list of the ten role names that matches the agent files exactly (`VAL-9`), and MUST contain a pattern registry (§7 below) that matches the ones in `docs/design.md` and `docs/cheatsheet.md` (`VAL-10`).
+`SKL-6` `SKILL.md` MUST contain an explicit dispatch list of the eleven role names that matches the agent files exactly (`VAL-9`), and MUST contain a pattern registry (§7 below) that matches the ones in `docs/design.md` and `docs/cheatsheet.md` (`VAL-10`).
 
 ## 7. Multi-Agent Patterns
 
@@ -166,7 +169,7 @@ tools: Read, Grep, Glob, Bash, WebFetch, WebSearch, Edit, Write, NotebookEdit
 
 `PAT-5` Patterns that cannot satisfy `PAT-3` (peer-to-peer topologies, dynamically created roles) MUST be treated as out of scope. Deterministic heavy fan-out over dozens of agents remains a non-goal.
 
-`PAT-6` The `orchestrator-worker` default MUST support (at least) these recipes, retargeted to the kebab-case names: plan→implement→review (`planner`→`coding-worker`→`reviewer`); fast fix (`fast-coding-worker`, with `reviewer` when behavior/public API changes); investigation before editing (`helper-worker`→worker); deep root-cause (`forensic-analyst`→`coding-worker`); documentation drift (`doc-reviewer`); high-stakes/security review (`reviewer`); exploratory QA (`qa-engineer` after a feature lands, routing confirmed findings to a worker); edge-case/coverage analysis (`edge-case-analyst`, routing confirmed cases to a worker). For report-producing roles (`forensic-analyst`, `edge-case-analyst`) the parent MUST save the accepted report to a file only when the user requests it.
+`PAT-6` The `orchestrator-worker` default MUST support (at least) these recipes, retargeted to the kebab-case names: plan→implement→review (`planner`→`coding-worker`→`reviewer`); fast fix (`fast-coding-worker`, with `reviewer` when behavior/public API changes); investigation before editing (`helper-worker`→worker); deep root-cause (`forensic-analyst`→`coding-worker`); documentation drift (`doc-reviewer`); high-stakes/security review (`reviewer`); exploratory QA (`qa-engineer` after a feature lands, routing confirmed findings to a worker); edge-case/coverage analysis (`edge-case-analyst`, routing confirmed cases to a worker); spec-first (`spec-test-writer`→`coding-worker`→`reviewer`, where the parent gives `spec-test-writer` the requirements, plans, and interface but not the planned implementation, confirms its diff touches only test files and test fixtures, and routes implementation to `coding-worker` so writer and implementer run on different models). For report-producing roles (`forensic-analyst`, `edge-case-analyst`) the parent MUST save the accepted report to a file only when the user requests it.
 
 ## 8. Advisory Pattern Protocol
 
@@ -226,7 +229,7 @@ The advisor MUST NOT edit files and MUST NOT produce user-facing output.
 
 `VAL-13` The validator MUST exit non-zero on any failed check.
 
-`VAL-14` The validator MUST verify the on-disk roster matches the normative table in §3 exactly: the same ten role names and, per role, the same `model`, `effort` (including its required absence on Haiku roles), and derived access class (`AGT-1`, `ART-3`). This is the only check whose expected values are embedded in the validator rather than derived from the files on disk, so the roster cannot drift from the spec even when every doc is updated to match the drifted files.
+`VAL-14` The validator MUST verify the on-disk roster matches the normative table in §3 exactly: the same eleven role names and, per role, the same `model`, `effort` (including its required absence on Haiku roles), and derived access class (`AGT-1`, `ART-3`). This is the only check whose expected values are embedded in the validator rather than derived from the files on disk, so the roster cannot drift from the spec even when every doc is updated to match the drifted files.
 
 > The two conceptual changes from the Agenticons validator: (1) the access check validates a *derived* access class from the presence of editing tools rather than a literal `sandbox_mode` string (`VAL-6`); (2) the `effort`-validity (`VAL-5`) and `Agent`-exclusion (`VAL-6`) checks encode invariants implicit in Claude Code's model.
 
@@ -285,7 +288,7 @@ The advisor MUST NOT edit files and MUST NOT produce user-facing output.
 
 `ACC-4` `.github/workflows/validate.yml` MUST run `ACC-1`–`ACC-3` and `ACC-6` on every push and pull request.
 
-`ACC-5` All ten agent files, `SKILL.md`, `scripts/install.sh`, `README.md`, `docs/design.md`, `docs/faq.md`, and `docs/cheatsheet.md` MUST be mutually consistent per the validator checks (`VAL-1`–`VAL-14`).
+`ACC-5` All eleven agent files, `SKILL.md`, `scripts/install.sh`, `README.md`, `docs/design.md`, `docs/faq.md`, and `docs/cheatsheet.md` MUST be mutually consistent per the validator checks (`VAL-1`–`VAL-14`).
 
 `ACC-6` `scripts/test_install.sh` (`INS-9`) MUST pass (exit 0).
 

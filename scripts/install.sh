@@ -30,6 +30,7 @@ AGENTS=(
   qa-engineer
   edge-case-analyst
   advisor
+  spec-test-writer
 )
 
 # ---------------------------------------------------------------------------

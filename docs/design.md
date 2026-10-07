@@ -49,7 +49,7 @@ Autobots uses a **task-fit** mapping: every Claude tier is used for the work it 
 
 **Readers and analysts run a big model with deep reasoning.** Every role whose output gates correctness runs on Fable — the Mythos-class tier above Opus — at `high`: `planner` (a bad decomposition wastes every worker-token that follows), `forensic-analyst`, `advisor`, `edge-case-analyst`, and `reviewer`. The first four moved from `xhigh` on 2026-10-04: Anthropic's Fable 5.1 prompting guide says to start at `high` and to use `xhigh` only where a quality gain has been measured, and no Autobots measurement supported `xhigh` for these roles. The guide also reports that at `xhigh` Fable can draft a long deliverable in its thinking and then write it again. The move to `high` has not been measured on Autobots tasks either. `reviewer` was already at `high`, since it runs after every change and higher effort in review trades precision for recall — a reviewer that pads each cycle with speculative findings costs triage time, which is a quality cost as well as a speed cost. `ultrathink` remains the per-dispatch escalation for a security-sensitive review.
 
-**Executors run Opus at `medium`; Sonnet covers mechanical work.** Opus carries the execution-heavy roles: standard implementation (`coding-worker`, `medium`) and QA's long tool-call loops (`qa-engineer`, `high`, because its reasoning goes into judging what counts as a regression while its writes are throwaway scaffolding), plus `doc-reviewer` at `high`, whose semantic drift checks are judgment work. `coding-worker` and `qa-engineer` moved from Sonnet 5 on 2026-09-22: in Anthropic's testing, Opus 5.5 at `medium` matches or beats Opus 5 at `high` on coding, with fewer tokens per task. This has not yet been measured on Autobots tasks. Sonnet handles fast mechanical work, where turn speed is the point: `fast-coding-worker` at `medium` and `helper-worker` at `low`. `fast-coding-worker` moved from `low` to `medium` on 2026-09-30, once cost stopped being a constraint: the claude-api model guide recommends `medium` for agentic coding and warns that `low` is more likely to skip verifying changes. A local 60-session eval on ten coding cases found no pass-rate difference (30/30 each) and 1.06× the median wall time. Those two roles ran on Haiku 4.5 until 2026-09-22; they moved because Haiku 4.5 is eligible for retirement from October 15, 2026, has no successor, and has a February 2025 knowledge cutoff. The roster has no Haiku role.
+**Executors run Opus at `medium`; Sonnet covers mechanical work and spec tests.** Opus carries the execution-heavy roles: standard implementation (`coding-worker`, `medium`) and QA's long tool-call loops (`qa-engineer`, `high`, because its reasoning goes into judging what counts as a regression while its writes are throwaway scaffolding), plus `doc-reviewer` at `high`, whose semantic drift checks are judgment work. `coding-worker` and `qa-engineer` moved from Sonnet 5 on 2026-09-22: in Anthropic's testing, Opus 5.5 at `medium` matches or beats Opus 5 at `high` on coding, with fewer tokens per task. This has not yet been measured on Autobots tasks. Sonnet handles fast mechanical work, where turn speed is the point: `fast-coding-worker` at `medium` and `helper-worker` at `low`. `fast-coding-worker` moved from `low` to `medium` on 2026-09-30, once cost stopped being a constraint: the claude-api model guide recommends `medium` for agentic coding and warns that `low` is more likely to skip verifying changes. A local 60-session eval on ten coding cases found no pass-rate difference (30/30 each) and 1.06× the median wall time. Those two roles ran on Haiku 4.5 until 2026-09-22; they moved because Haiku 4.5 is eligible for retirement from October 15, 2026, has no successor, and has a February 2025 knowledge cutoff. The roster has no Haiku role. `spec-test-writer` (`high`) is on Sonnet because the role needs a model different from the implementer `coding-worker` (Opus), and the requirement-level judgment sits with `planner` and the owner upstream.
 
 | Role | Agenticons model | Claude alias | Resolves to (Claude Code 2.1.255+) |
 |---|---|---|---|
@@ -63,8 +63,9 @@ Autobots uses a **task-fit** mapping: every Claude tier is used for the work it 
 | `qa-engineer` | `gpt-5.5` | `opus` | Opus 5.5 |
 | `edge-case-analyst` | `gpt-5.5` | `fable` | Fable 5.1 |
 | `advisor` | — (Autobots-only) | `fable` | Fable 5.1 |
+| `spec-test-writer` | — (Autobots-only) | `sonnet` | Sonnet 5.5 |
 
-Distribution: **5 Fable · 3 Opus · 2 Sonnet · 0 Haiku** (ten roles; `advisor` is an Autobots addition with no Agenticons counterpart — see the advisory pattern in Multi-Agent Patterns).
+Distribution: **5 Fable · 3 Opus · 3 Sonnet · 0 Haiku** (eleven roles; `advisor` and `spec-test-writer` are Autobots additions with no Agenticons counterpart — see the advisory pattern in Multi-Agent Patterns and the spec-first recipe in the dispatch contract).
 
 Specs use the family alias (`fable`/`opus`/`sonnet`/`haiku`) in the `model:` field, deliberately: an alias resolves to the newest model Claude Code knows for that family, so a role tracks new releases as soon as Claude Code is updated, with no roster edit. What is fixed per role is the *family* (the tier), the effort, and the access class — not the version. Autobots assumes the Anthropic API provider; alias resolution differs by provider (see [Claude Code's alias table](https://code.claude.com/docs/en/model-config#model-aliases)). The "resolves to" column above is what the aliases mean on Claude Code 2.1.255 or later; before 2.1.255, `fable` resolved to Fable 5. Two things can break the "newest model" property, and the installer warns on both: an older Claude Code build, and an `ANTHROPIC_DEFAULT_FABLE_MODEL`/`_OPUS_MODEL`/`_SONNET_MODEL` environment variable, which redirects the alias outright (Claude Code also accepts full model IDs such as `claude-fable-5-1` in `model:`; pinning one is the stricter-reproducibility alternative, rejected here because it would freeze the roster on a version until someone edits it). Because the resolution column is a snapshot, any doc line that names a concrete model version must say which Claude Code version it is true for. The model IDs a routing-gate run actually tested are recorded as `resolved_models` in its `evals/results/*.json` file.
 
@@ -95,8 +96,9 @@ Autobots pins every role at step 2, so `CLAUDE_CODE_SUBAGENT_MODEL` by itself is
 | `qa-engineer` | writable | Opus | high | Exploratory QA verification: exercises changes end-to-end, probes regressions, performance, and user-facing rough edges |
 | `edge-case-analyst` | read-only | Fable | high | Edge-case and coverage-gap discovery: finds unconsidered cases and specifies expected behavior and test cases |
 | `advisor` | read-only | Fable | high | Guidance-only consultant for the advisory pattern: returns a plan, correction, or stop signal; never edits, never produces user-facing output |
+| `spec-test-writer` | writable | Sonnet | high | Writes spec tests from requirements, plans, issues, and the interface before implementation; never sees the planned implementation; edits only test files and test fixtures; confirms each test fails for the right reason |
 
-The roles, responsibilities, and read-only/writable split carry over from Agenticons' original nine, plus one Autobots-only addition, `advisor`, which exists for the advisory pattern and has no Agenticons counterpart. Effort levels are not a straight port, though: parity with Agenticons' `model_reasoning_effort` assignments was never a design goal, and they were tuned instead for the Claude model family and this package's own task-fit rationale (see Model Mapping). No role runs on Haiku: `helper-worker` on Sonnet at `low` effort is the floor for fast, mechanical work.
+The roles, responsibilities, and read-only/writable split carry over from Agenticons' original nine, plus two Autobots-only additions: `advisor`, which exists for the advisory pattern, and `spec-test-writer`, which writes spec tests before implementation; neither has an Agenticons counterpart. Effort levels are not a straight port, though: parity with Agenticons' `model_reasoning_effort` assignments was never a design goal, and they were tuned instead for the Claude model family and this package's own task-fit rationale (see Model Mapping). No role runs on Haiku: `helper-worker` on Sonnet at `low` effort is the floor for fast, mechanical work.
 
 ## Agent Spec Contract
 
@@ -173,6 +175,7 @@ Two caveats shape the rendering:
 | `forensic-analyst` | `xhigh` | `high` |
 | `edge-case-analyst` | `xhigh` | `high` |
 | `advisor` | — (Autobots-only) | `high` |
+| `spec-test-writer` | — (Autobots-only) | `high` |
 
 The `ultrathink` keyword (recognized anywhere in a prompt body) remains available as a per-turn reinforcement for the deepest roles, and the user's session `/effort` still applies on top; neither is required, since `effort:` carries the contract.
 
@@ -238,6 +241,7 @@ Autobots keeps orchestration shallow. The parent delegates bounded subtasks, rec
 - Deep root-cause investigation: `forensic-analyst` → `coding-worker` once a cause is confirmed; the parent saves the accepted report to a file when the user requests it
 - Documentation drift review: `doc-reviewer`
 - High-stakes or security-sensitive review: `reviewer`
+- Spec first: `spec-test-writer` → `coding-worker` → `reviewer`, for features and public API contract changes; implementation goes to `coding-worker`, not `fast-coding-worker`, so tests and code come from different models
 - Exploratory QA verification: `qa-engineer` after a feature lands or before a release; it exercises the change rather than reading it, and the parent routes confirmed findings to `coding-worker` or `fast-coding-worker`
 - Edge-case and coverage analysis: `edge-case-analyst` returns a report of uncovered cases with proposed specs and concrete test cases; the parent saves the report when the user requests it and routes confirmed cases to `coding-worker` or `fast-coding-worker`
 
@@ -270,7 +274,7 @@ Claude Code has no agent nickname system, so Autobots drops Agenticons' `nicknam
 
 Two Claude Code distribution units are available; Autobots deliberately chooses the first:
 
-- **File-based (chosen).** `SKILL.md` and the ten agent `.md` files are copied directly into `.claude/skills/autobots/` and `.claude/agents/` (or their `~/.claude` equivalents), exactly mirroring how Agenticons ships. This keeps `scripts/install.sh` as the single distribution path and — critically — is the only form in which the optional `hooks.PreToolUse` read-only enforcement (Access Model, tier 3) actually runs.
+- **File-based (chosen).** `SKILL.md` and the eleven agent `.md` files are copied directly into `.claude/skills/autobots/` and `.claude/agents/` (or their `~/.claude` equivalents), exactly mirroring how Agenticons ships. This keeps `scripts/install.sh` as the single distribution path and — critically — is the only form in which the optional `hooks.PreToolUse` read-only enforcement (Access Model, tier 3) actually runs.
 - **Plugin (not chosen).** Claude Code plugins bundle `agents/` + `skills/` with a marketplace manifest and install via `/plugin install <name>@<marketplace>`. Plugins give automatic namespacing (`autobots:reviewer`) and one-command installation, but plugin subagents **silently ignore** `hooks`, `mcpServers`, and `permissionMode`. Because Autobots' strongest read-only guarantee depends on `hooks`, the plugin form would quietly weaken it. A plugin distribution can be added later as a convenience, documented as not supporting hook-enforced read-only.
 
 ## Validation
@@ -291,7 +295,7 @@ It checks:
 - the pattern registries in `SKILL.md`, `docs/design.md`, and `docs/cheatsheet.md` list the same pattern names, and every role a pattern references exists as an agent file
 - `scripts/install.sh`'s agent list matches the agent files
 - deprecated project identifiers do not remain in primary docs
-- the on-disk roster matches the normative table in `docs/spec.md` §3 exactly — the same ten role names and, per role, the pinned model, effort, and access class — so the roster cannot drift from the spec even if every doc is updated to match the drifted files
+- the on-disk roster matches the normative table in `docs/spec.md` §3 exactly — the same eleven role names and, per role, the pinned model, effort, and access class — so the roster cannot drift from the spec even if every doc is updated to match the drifted files
 
 Run validation and tests with:
 
