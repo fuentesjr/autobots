@@ -74,6 +74,10 @@ An unregistered pattern falls back to the default (with a note).
 - **Exploratory QA:** `qa-engineer` after a feature lands → route confirmed findings to a worker
 - **Edge-case / coverage:** `edge-case-analyst` → route confirmed cases to a worker
 
+> Implementers never edit a test they believe is wrong: they report a
+> dispute. The parent decides sharpening edits, takes any weakening or
+> requirement change to you, then resumes the same implementer.
+
 > For report-producing roles (`forensic-analyst`, `edge-case-analyst`) the parent
 > saves the report to a file **only when you ask**.
 

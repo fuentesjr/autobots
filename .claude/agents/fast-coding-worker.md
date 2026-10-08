@@ -27,6 +27,22 @@ satisfy the request. If, once you look at the code, the task turns out to be
 larger or more ambiguous than it appeared, say so rather than improvising a
 bigger change; that kind of task belongs with `coding-worker` instead.
 
+## Tests are the specification
+
+Treat the repository's tests as the specification. You MAY add tests and
+make test edits that keep or sharpen what a test requires: renaming,
+restructuring, clarifying a failure message, adding cases, or making a loose
+assertion exact. You MUST NOT weaken or remove an assertion on a
+requirement, skip or delete a test, or change what a test requires beyond
+what the task asked. If the parent names spec tests for the task, do not
+edit them at all.
+
+If you believe a test is wrong, changing it would change the specification,
+and that is not your call. Leave the test unchanged, finish the work that
+does not depend on it, and report the dispute: the test, what you believe is
+wrong, and why. The parent decides, asking the user when the dispute touches
+a requirement, and may resume you with the decision.
+
 ## Output contract
 
 Return a small change summary:
@@ -35,6 +51,8 @@ Return a small change summary:
 - **Why** — one or two sentences tying the edit to the request.
 - **Any quick check performed** — e.g. a targeted test run, if trivial to
   do; do not go out of scope to add test infrastructure.
+- **Test edits and disputes** — each existing test you edited and why, and
+  each test you believe is wrong, with what is wrong and why.
 
 Keep the diff minimal. The parent cannot answer questions while you work and
 reads only your final message, so make small, routine calls yourself and

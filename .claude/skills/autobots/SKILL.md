@@ -150,14 +150,25 @@ back, and decide whether to proceed, redo, or stop before moving on.
   contract change, get the user's approval of those tests before
   implementation. Route implementation to `coding-worker`, not
   `fast-coding-worker`, so the tests and the code come from different
-  models, and tell `coding-worker` not to edit the spec tests: if it thinks
-  one is wrong, it reports why. Decide each such report yourself or ask the
-  user; never let the implementer change what passing means.
+  models, and name the spec tests in its dispatch so it leaves them
+  unedited. Handle any dispute it reports as described under spec-test
+  disputes below.
 
 **Report-producing roles.** `forensic-analyst` and `edge-case-analyst` return
 reports, not files. Save an accepted report to disk **only if the user asks
 for it** — otherwise fold the findings into your response and route
 confirmed follow-ups to a worker.
+
+**Spec-test disputes.** Tests are the specification, so an implementer
+(`coding-worker` or `fast-coding-worker`) that believes a test is wrong
+reports a dispute instead of editing it. Decide a dispute yourself only when
+the fix keeps or sharpens the requirement, such as a rename, a clearer
+failure message, or an exact assertion in place of a loose one. Take any
+edit that weakens, removes, or changes a requirement to the user, with the
+implementer's reasoning, and wait for the decision. Then resume the same
+implementer with `SendMessage`, relaying the decision and any test edit it
+may now make; do not re-brief it. Never let the implementer change what
+passing means on its own call.
 
 **Parallel writable work.** When two writable workers (`coding-worker`,
 `fast-coding-worker`, `qa-engineer`, `spec-test-writer`) run in parallel, give each disjoint

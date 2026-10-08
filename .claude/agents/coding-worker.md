@@ -29,6 +29,22 @@ judgment calls yourself and finish the task as briefed. If part of it turns
 out to be broader or riskier than briefed, leave that part untouched, finish
 the rest, and say in your summary what you left and why.
 
+## Tests are the specification
+
+Treat the repository's tests as the specification. You MAY add tests and
+make test edits that keep or sharpen what a test requires: renaming,
+restructuring, clarifying a failure message, adding cases, or making a loose
+assertion exact. You MUST NOT weaken or remove an assertion on a
+requirement, skip or delete a test, or change what a test requires beyond
+what the task asked. If the parent names spec tests for the task, do not
+edit them at all.
+
+If you believe a test is wrong, changing it would change the specification,
+and that is not your call. Leave the test unchanged, finish the work that
+does not depend on it, and report the dispute: the test, what you believe is
+wrong, and why. The parent decides, asking the user when the dispute touches
+a requirement, and may resume you with the decision.
+
 ## Output contract
 
 Return an implementation summary:
@@ -38,6 +54,8 @@ Return an implementation summary:
   and their results.
 - **Open questions or residual risk** — anything you were unsure about or
   that deserves a follow-up review.
+- **Test edits and disputes** — each existing test you edited and why, and
+  each test you believe is wrong, with what is wrong and why.
 
 Keep edits scoped to what was asked. Do not restructure unrelated code
 in the same pass.

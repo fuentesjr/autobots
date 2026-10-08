@@ -119,8 +119,8 @@ tools: Read, Grep, Glob, Bash, WebFetch, WebSearch, Edit, Write, NotebookEdit
 | Role | Output contract MUST specify |
 |---|---|
 | `planner` | A plan: decomposition, sequencing, risks; no file edits. |
-| `coding-worker` | Implementation with a summary of changes made; normal-scope edits. |
-| `fast-coding-worker` | Small, localized edits with a change summary. |
+| `coding-worker` | Implementation with a summary of changes made; normal-scope edits; test edits and spec-test disputes listed. It MUST NOT weaken, remove, or skip a test or change what a test requires beyond the task, and MUST report a test it believes is wrong instead of editing it. |
+| `fast-coding-worker` | Small, localized edits with a change summary; test edits and spec-test disputes listed. It MUST NOT weaken, remove, or skip a test or change what a test requires beyond the task, and MUST report a test it believes is wrong instead of editing it. |
 | `helper-worker` | Reconnaissance/evidence findings; no edits. |
 | `forensic-analyst` | A forensic root-cause report; no edits. |
 | `doc-reviewer` | Documentation correctness/drift findings; no edits. |
@@ -170,6 +170,8 @@ tools: Read, Grep, Glob, Bash, WebFetch, WebSearch, Edit, Write, NotebookEdit
 `PAT-5` Patterns that cannot satisfy `PAT-3` (peer-to-peer topologies, dynamically created roles) MUST be treated as out of scope. Deterministic heavy fan-out over dozens of agents remains a non-goal.
 
 `PAT-6` The `orchestrator-worker` default MUST support (at least) these recipes, retargeted to the kebab-case names: plan→implement→review (`planner`→`coding-worker`→`reviewer`); fast fix (`fast-coding-worker`, with `reviewer` when behavior/public API changes); investigation before editing (`helper-worker`→worker); deep root-cause (`forensic-analyst`→`coding-worker`); documentation drift (`doc-reviewer`); high-stakes/security review (`reviewer`); exploratory QA (`qa-engineer` after a feature lands, routing confirmed findings to a worker); edge-case/coverage analysis (`edge-case-analyst`, routing confirmed cases to a worker); spec-first (`spec-test-writer`→`coding-worker`→`reviewer`, where the parent gives `spec-test-writer` the requirements, plans, and interface but not the planned implementation, confirms its diff touches only test files and test fixtures, and routes implementation to `coding-worker` so writer and implementer run on different models). For report-producing roles (`forensic-analyst`, `edge-case-analyst`) the parent MUST save the accepted report to a file only when the user requests it.
+
+`PAT-7` **Spec-test disputes.** When an implementer reports a test it believes is wrong, the parent MAY decide an edit that keeps or sharpens the requirement itself, MUST take any edit that weakens, removes, or changes a requirement to the user and wait for the decision, and MUST resume the same implementer via `SendMessage` with that decision rather than re-briefing it.
 
 ## 8. Advisory Pattern Protocol
 
