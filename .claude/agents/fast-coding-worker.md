@@ -29,13 +29,12 @@ bigger change; that kind of task belongs with `coding-worker` instead.
 
 ## Tests are the specification
 
-Treat the repository's tests as the specification. You MAY add tests and
-make test edits that keep or sharpen what a test requires: renaming,
-restructuring, clarifying a failure message, adding cases, or making a loose
-assertion exact. You MUST NOT weaken or remove an assertion on a
-requirement, skip or delete a test, or change what a test requires beyond
-what the task asked. If the parent names spec tests for the task, do not
-edit them at all.
+Treat the repository's tests as the specification. You MAY add new tests,
+and you MAY rename or restructure an existing test or clarify its failure
+message as long as every assertion stays as it was. You MUST NOT change an
+existing assertion, even to make it stricter, and MUST NOT skip or delete a
+test, unless the parent's brief asks for that exact change. If the parent
+names spec tests for the task, do not edit them at all.
 
 If you believe a test is wrong, changing it would change the specification,
 and that is not your call. Leave the test unchanged, finish the work that

@@ -119,8 +119,8 @@ tools: Read, Grep, Glob, Bash, WebFetch, WebSearch, Edit, Write, NotebookEdit
 | Role | Output contract MUST specify |
 |---|---|
 | `planner` | A plan: decomposition, sequencing, risks; no file edits. |
-| `coding-worker` | Implementation with a summary of changes made; normal-scope edits; test edits and spec-test disputes listed. It MUST NOT weaken, remove, or skip a test or change what a test requires beyond the task, and MUST report a test it believes is wrong instead of editing it. |
-| `fast-coding-worker` | Small, localized edits with a change summary; test edits and spec-test disputes listed. It MUST NOT weaken, remove, or skip a test or change what a test requires beyond the task, and MUST report a test it believes is wrong instead of editing it. |
+| `coding-worker` | Implementation with a summary of changes made; normal-scope edits; test edits and spec-test disputes listed. It MUST NOT change an existing assertion (even to tighten it) or skip or delete a test unless the parent's brief asks for that exact change, and MUST report a test it believes is wrong instead of editing it. |
+| `fast-coding-worker` | Small, localized edits with a change summary; test edits and spec-test disputes listed. It MUST NOT change an existing assertion (even to tighten it) or skip or delete a test unless the parent's brief asks for that exact change, and MUST report a test it believes is wrong instead of editing it. |
 | `helper-worker` | Reconnaissance/evidence findings; no edits. |
 | `forensic-analyst` | A forensic root-cause report; no edits. |
 | `doc-reviewer` | Documentation correctness/drift findings; no edits. |

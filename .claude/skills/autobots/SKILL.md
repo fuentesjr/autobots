@@ -168,7 +168,10 @@ edit that weakens, removes, or changes a requirement to the user, with the
 implementer's reasoning, and wait for the decision. Then resume the same
 implementer with `SendMessage`, relaying the decision and any test edit it
 may now make; do not re-brief it. Never let the implementer change what
-passing means on its own call.
+passing means on its own call. When a task deliberately changes behavior
+that an existing test asserts, name that test and the new expected behavior
+in the brief; implementers change an existing assertion only when the brief
+asks for that exact change.
 
 **Parallel writable work.** When two writable workers (`coding-worker`,
 `fast-coding-worker`, `qa-engineer`, `spec-test-writer`) run in parallel, give each disjoint

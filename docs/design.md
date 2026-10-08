@@ -245,7 +245,7 @@ Autobots keeps orchestration shallow. The parent delegates bounded subtasks, rec
 - Exploratory QA verification: `qa-engineer` after a feature lands or before a release; it exercises the change rather than reading it, and the parent routes confirmed findings to `coding-worker` or `fast-coding-worker`
 - Edge-case and coverage analysis: `edge-case-analyst` returns a report of uncovered cases with proposed specs and concrete test cases; the parent saves the report when the user requests it and routes confirmed cases to `coding-worker` or `fast-coding-worker`
 
-Implementers treat tests as the specification. A `coding-worker` or `fast-coding-worker` that believes a test is wrong reports a dispute instead of editing it; the parent decides edits that keep or sharpen the requirement, takes anything that weakens or changes one to the user, and resumes the same implementer with the decision.
+Implementers treat tests as the specification. A `coding-worker` or `fast-coding-worker` that believes a test is wrong reports a dispute instead of editing it, and never changes an existing assertion unless the brief asks for that exact change; the parent decides edits that keep or sharpen the requirement, takes anything that weakens or changes one to the user, and resumes the same implementer with the decision.
 
 Parallel writable work uses disjoint ownership. Where two writable workers might otherwise collide, the parent can additionally spawn them with `isolation: worktree`, which runs each in its own git worktree — a stronger guarantee than ownership-by-convention. Parallel review work uses distinct review angles such as correctness, security, and regression risk.
 
