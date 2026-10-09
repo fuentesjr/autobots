@@ -306,7 +306,7 @@ func checkVAL4(specs []*agentSpec) {
 }
 
 // ---------------------------------------------------------------------------
-// VAL-5: effort valid when present; absent on Haiku roles
+// VAL-5: effort present and valid on every role
 // ---------------------------------------------------------------------------
 
 func checkVAL5(specs []*agentSpec) {
@@ -316,12 +316,10 @@ func checkVAL5(specs []*agentSpec) {
 			continue
 		}
 		effort := strings.TrimSpace(s.frontmatter.Effort)
-		model := strings.TrimSpace(s.frontmatter.Model)
-		if effort != "" && !allowedEfforts[effort] {
+		if effort == "" {
+			fails = append(fails, fmt.Sprintf("%s: effort is missing; every role must set it explicitly", s.path))
+		} else if !allowedEfforts[effort] {
 			fails = append(fails, fmt.Sprintf("%s: effort %q is not one of low/medium/high/xhigh/max", s.path, effort))
-		}
-		if model == "haiku" && effort != "" {
-			fails = append(fails, fmt.Sprintf("%s: effort %q must be absent on Haiku role %q", s.path, effort, s.filename))
 		}
 	}
 	record("VAL-5", len(fails) == 0, fails...)
@@ -801,7 +799,7 @@ func checkVAL12(readme, skill, faq, cheatsheet string, names []string) {
 
 type rosterEntry struct {
 	model    string
-	effort   string // "" means the effort field must be omitted (Haiku roles; none in the current roster)
+	effort   string
 	writable bool
 }
 
@@ -811,7 +809,7 @@ type rosterEntry struct {
 var expectedRoster = map[string]rosterEntry{
 	"planner":            {model: "fable", effort: "high", writable: false},
 	"coding-worker":      {model: "opus", effort: "medium", writable: true},
-	"fast-coding-worker": {model: "sonnet", effort: "medium", writable: true},
+	"fast-coding-worker": {model: "haiku", effort: "medium", writable: true},
 	"helper-worker":      {model: "sonnet", effort: "low", writable: false},
 	"forensic-analyst":   {model: "fable", effort: "high", writable: false},
 	"doc-reviewer":       {model: "opus", effort: "high", writable: false},
@@ -839,11 +837,7 @@ func checkVAL14(specs []*agentSpec) {
 			fails = append(fails, fmt.Sprintf("%s: model %q does not match the normative roster (%q)", s.path, got, want.model))
 		}
 		if got := strings.TrimSpace(s.frontmatter.Effort); got != want.effort {
-			if want.effort == "" {
-				fails = append(fails, fmt.Sprintf("%s: effort %q must be omitted per the normative roster", s.path, got))
-			} else {
-				fails = append(fails, fmt.Sprintf("%s: effort %q does not match the normative roster (%q)", s.path, got, want.effort))
-			}
+			fails = append(fails, fmt.Sprintf("%s: effort %q does not match the normative roster (%q)", s.path, got, want.effort))
 		}
 		writable := false
 		for _, tok := range parseToolTokens(s.frontmatter.Tools) {

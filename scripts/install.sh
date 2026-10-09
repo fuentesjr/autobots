@@ -207,10 +207,10 @@ if [ -n "${CLAUDE_CODE_SUBAGENT_MODEL_FORCE:-}" ]; then
   warn "want each Autobots role to run the model its spec declares."
 fi
 
-# Roles pin family aliases (fable/opus/sonnet) so they track the newest model
+# Roles pin family aliases (fable/opus/sonnet/haiku) so they track the newest model
 # per family. ANTHROPIC_DEFAULT_*_MODEL redirects an alias outright, and on
 # Claude Code older than 2.1.255 the aliases resolve to older models.
-for alias_var in ANTHROPIC_DEFAULT_FABLE_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL; do
+for alias_var in ANTHROPIC_DEFAULT_FABLE_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL; do
   if [ -n "${!alias_var:-}" ]; then
     warn "${alias_var} is set to '${!alias_var}'. It redirects the family alias that"
     warn "Autobots roles pin, so those roles will not run the newest model in that family."

@@ -31,13 +31,13 @@ ask for delegation explicitly.
 
 ## The roster (eleven roles)
 
-Distribution: **5 Fable · 3 Opus · 3 Sonnet · 0 Haiku**.
+Distribution: **5 Fable · 3 Opus · 2 Sonnet · 1 Haiku**.
 
 | Role | Model | Effort | Access | Reach for it when… |
 |---|---|---|---|---|
 | `planner` | Fable | high | read-only | you need architecture, decomposition, sequencing, risk analysis before code |
 | `coding-worker` | Opus | medium | **writable** | normal-scope implementation, bug fixes, refactors |
-| `fast-coding-worker` | Sonnet | medium | **writable** | small, localized, low-risk edits / quick fixes |
+| `fast-coding-worker` | Haiku | medium | **writable** | small, localized, low-risk edits / quick fixes |
 | `helper-worker` | Sonnet | low | read-only | quick lookup, repo recon, evidence gathering before editing |
 | `forensic-analyst` | Fable | high | read-only | deep root-cause on hard/intermittent/cross-system bugs |
 | `doc-reviewer` | Opus | high | read-only | documentation correctness / drift review |

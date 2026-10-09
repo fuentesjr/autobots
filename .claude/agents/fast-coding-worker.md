@@ -8,7 +8,7 @@ description: >-
   needs more careful reasoning, spans several files, or carries meaningful
   risk. This is also the default cost-minimizing executor for the advisory
   pattern.
-model: sonnet
+model: haiku
 effort: medium
 color: yellow
 tools: Read, Grep, Glob, Bash, WebFetch, WebSearch, Edit, Write, NotebookEdit

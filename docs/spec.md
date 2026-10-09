@@ -55,7 +55,7 @@ This document is the **normative, buildable contract** for the Autobots package.
 |---|---|---|---|---|
 | `planner` | read-only | `fable` | `high` | Fable 5.1 |
 | `coding-worker` | writable | `opus` | `medium` | Opus 5.5 |
-| `fast-coding-worker` | writable | `sonnet` | `medium` | Sonnet 5.5 |
+| `fast-coding-worker` | writable | `haiku` | `medium` | Haiku 5.5 (Claude Code 2.1.293 or later) |
 | `helper-worker` | read-only | `sonnet` | `low` | Sonnet 5.5 |
 | `forensic-analyst` | read-only | `fable` | `high` | Fable 5.1 |
 | `doc-reviewer` | read-only | `opus` | `high` | Opus 5.5 |
@@ -65,7 +65,7 @@ This document is the **normative, buildable contract** for the Autobots package.
 | `advisor` | read-only | `fable` | `high` | Fable 5.1 |
 | `spec-test-writer` | writable | `sonnet` | `high` | Sonnet 5.5 |
 
-`AGT-2` Model distribution MUST be **5 Fable** (`planner`, `forensic-analyst`, `reviewer`, `edge-case-analyst`, `advisor`) · **3 Opus** (`coding-worker`, `doc-reviewer`, `qa-engineer`) · **3 Sonnet** (`fast-coding-worker`, `helper-worker`, `spec-test-writer`) · **0 Haiku**.
+`AGT-2` Model distribution MUST be **5 Fable** (`planner`, `forensic-analyst`, `reviewer`, `edge-case-analyst`, `advisor`) · **3 Opus** (`coding-worker`, `doc-reviewer`, `qa-engineer`) · **2 Sonnet** (`helper-worker`, `spec-test-writer`) · **1 Haiku** (`fast-coding-worker`).
 
 `AGT-3` Exactly four roles MUST be writable: `coding-worker`, `fast-coding-worker`, `qa-engineer`, `spec-test-writer`. All other seven roles MUST be read-only.
 
@@ -82,7 +82,7 @@ This document is the **normative, buildable contract** for the Autobots package.
 | `name` | MUST be present, `kebab-case`, and equal to the filename without `.md`. MUST be unique across the roster. |
 | `description` | MUST be present and non-blank. MUST describe when to route to the role and SHOULD include one or more `<example>` trigger blocks that drive automatic delegation. |
 | `model` | MUST be present and MUST be one of `fable`, `opus`, `sonnet`, `haiku`, matching §3 for the role. |
-| `effort` | MUST be present on every Fable/Opus/Sonnet role with the value in §3. MUST be omitted on every Haiku role (currently none in the roster). |
+| `effort` | MUST be present on every role, including Haiku roles, with the value in §3. An omitted `effort` inherits the session's `/effort`. |
 | `tools` | MUST be present and MUST be exactly the access-class list in §4.2. MUST NOT contain `Agent`. MUST NOT contain any todo tool (`TaskCreate`, `TaskGet`, `TaskUpdate`, `TaskList`). |
 | `color` | MAY be present (optional UI color). |
 
@@ -132,7 +132,7 @@ tools: Read, Grep, Glob, Bash, WebFetch, WebSearch, Edit, Write, NotebookEdit
 
 ## 5. Model Routing
 
-`MDL-1` Each role MUST be pinned to the `model` family alias in §3 via its frontmatter. Specs MUST use the alias (`fable`/`opus`/`sonnet`/`haiku`), not a full model ID, so that each role runs the newest model Claude Code knows for its family without a roster edit. Any doc that names the concrete model an alias resolves to MUST state the Claude Code version that resolution is true for (§3 states 2.1.255+). Pinning full model IDs remains a rejected alternative: it would freeze the roster on a version.
+`MDL-1` Each role MUST be pinned to the `model` family alias in §3 via its frontmatter. Specs MUST use the alias (`fable`/`opus`/`sonnet`/`haiku`), not a full model ID, so that each role runs the newest model Claude Code knows for its family without a roster edit. Any doc that names the concrete model an alias resolves to MUST state the Claude Code version that resolution is true for (§3 states 2.1.255+, and 2.1.293 for `haiku`, the first build where it resolves to Haiku 5.5). Pinning full model IDs remains a rejected alternative: it would freeze the roster on a version.
 
 `MDL-2` The parent MUST spawn each role with the model pinned in its spec and MUST NOT override a role to an unlisted model at dispatch time. Model changes MUST happen by editing the spec plus docs, never ad hoc.
 
@@ -175,7 +175,7 @@ tools: Read, Grep, Glob, Bash, WebFetch, WebSearch, Edit, Write, NotebookEdit
 
 ## 8. Advisory Pattern Protocol
 
-`ADV-1` The `advisory` pattern MUST use exactly one writable executor — `coding-worker` (Opus, normal work) or `fast-coding-worker` (Sonnet at `medium`, small localized edits) — plus the read-only `advisor` role (Fable, `high`).
+`ADV-1` The `advisory` pattern MUST use exactly one writable executor — `coding-worker` (Opus, normal work) or `fast-coding-worker` (Haiku at `medium`, small localized edits) — plus the read-only `advisor` role (Fable, `high`).
 
 `ADV-2` The loop MUST be **parent-mediated**. Executors MUST NOT consult the advisor directly, because the type-restricted `Agent(advisor)` allowlist syntax is ignored when an agent runs as a subagent; granting `Agent` would break the depth-1 invariant (`SKL-4`).
 
@@ -213,7 +213,7 @@ The advisor MUST NOT edit files and MUST NOT produce user-facing output.
 
 `VAL-4` The validator MUST verify `model` is one of `fable`, `opus`, `sonnet`, `haiku`.
 
-`VAL-5` The validator MUST verify that `effort`, when present, is one of `low`/`medium`/`high`/`xhigh`/`max`, and that it is **absent on Haiku roles** (where it is inert).
+`VAL-5` The validator MUST verify that `effort` is present on every role and is one of `low`/`medium`/`high`/`xhigh`/`max`.
 
 `VAL-6` The validator MUST verify `tools` is well-formed, **never contains `Agent`**, and that the **derived access class** (writable iff `tools` includes `Edit` or `Write`) matches the Access column in `docs/design.md`.
 
@@ -231,7 +231,7 @@ The advisor MUST NOT edit files and MUST NOT produce user-facing output.
 
 `VAL-13` The validator MUST exit non-zero on any failed check.
 
-`VAL-14` The validator MUST verify the on-disk roster matches the normative table in §3 exactly: the same eleven role names and, per role, the same `model`, `effort` (including its required absence on Haiku roles), and derived access class (`AGT-1`, `ART-3`). This is the only check whose expected values are embedded in the validator rather than derived from the files on disk, so the roster cannot drift from the spec even when every doc is updated to match the drifted files.
+`VAL-14` The validator MUST verify the on-disk roster matches the normative table in §3 exactly: the same eleven role names and, per role, the same `model`, `effort`, and derived access class (`AGT-1`, `ART-3`). This is the only check whose expected values are embedded in the validator rather than derived from the files on disk, so the roster cannot drift from the spec even when every doc is updated to match the drifted files.
 
 > The two conceptual changes from the Agenticons validator: (1) the access check validates a *derived* access class from the presence of editing tools rather than a literal `sandbox_mode` string (`VAL-6`); (2) the `effort`-validity (`VAL-5`) and `Agent`-exclusion (`VAL-6`) checks encode invariants implicit in Claude Code's model.
 
@@ -262,7 +262,7 @@ The advisor MUST NOT edit files and MUST NOT produce user-facing output.
 
 `INS-5` The installer MUST NOT overwrite existing, differing files unless `--force` is given, and MUST make no writes under `--dry-run`.
 
-`INS-6` The installer MUST warn when `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is set in the environment, because it silently overrides per-role model routing (`MDL-3`). It MUST also warn when any `ANTHROPIC_DEFAULT_FABLE_MODEL`/`ANTHROPIC_DEFAULT_OPUS_MODEL`/`ANTHROPIC_DEFAULT_SONNET_MODEL` variable is set, because it redirects the family alias a role pins (`MDL-1`), and when the installed `claude` is older than 2.1.255, because the aliases resolve to older models there. The version check MUST be skipped silently when `claude` is not on `PATH`.
+`INS-6` The installer MUST warn when `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is set in the environment, because it silently overrides per-role model routing (`MDL-3`). It MUST also warn when any `ANTHROPIC_DEFAULT_FABLE_MODEL`/`ANTHROPIC_DEFAULT_OPUS_MODEL`/`ANTHROPIC_DEFAULT_SONNET_MODEL`/`ANTHROPIC_DEFAULT_HAIKU_MODEL` variable is set, because it redirects the family alias a role pins (`MDL-1`), and when the installed `claude` is older than 2.1.255, because the aliases resolve to older models there. The version check MUST be skipped silently when `claude` is not on `PATH`.
 
 `INS-7` After install, the installer MUST advise the user to start a new Claude Code session so the agents are picked up (subagent file edits require a session restart unless made via `/agents`; skill edits are picked up live).
 

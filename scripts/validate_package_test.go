@@ -125,3 +125,28 @@ func TestScanLineForEntries(t *testing.T) {
 		}
 	}
 }
+
+func TestCheckVAL5RequiresEffortOnEveryRole(t *testing.T) {
+	cases := []struct {
+		name   string
+		model  string
+		effort string
+		pass   bool
+	}{
+		{"haiku with effort", "haiku", "medium", true},
+		{"haiku without effort", "haiku", "", false},
+		{"sonnet without effort", "sonnet", "", false},
+		{"invalid effort", "opus", "extreme", false},
+	}
+	for _, c := range cases {
+		results = nil
+		spec := &agentSpec{filename: "role", path: "role.md", frontmatter: frontmatter{Model: c.model, Effort: c.effort}}
+		checkVAL5([]*agentSpec{spec})
+		if len(results) != 1 {
+			t.Errorf("%s: want 1 result, got %d", c.name, len(results))
+		} else if results[0].pass != c.pass {
+			t.Errorf("%s: want pass=%v, got pass=%v messages=%v", c.name, c.pass, results[0].pass, results[0].messages)
+		}
+	}
+	results = nil
+}

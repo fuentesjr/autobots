@@ -49,13 +49,13 @@ Autobots uses a **task-fit** mapping: every Claude tier is used for the work it 
 
 **Readers and analysts run a big model with deep reasoning.** Every role whose output gates correctness runs on Fable — the Mythos-class tier above Opus — at `high`: `planner` (a bad decomposition wastes every worker-token that follows), `forensic-analyst`, `advisor`, `edge-case-analyst`, and `reviewer`. The first four moved from `xhigh` on 2026-10-04: Anthropic's Fable 5.1 prompting guide says to start at `high` and to use `xhigh` only where a quality gain has been measured, and no Autobots measurement supported `xhigh` for these roles. The guide also reports that at `xhigh` Fable can draft a long deliverable in its thinking and then write it again. The move to `high` has not been measured on Autobots tasks either. `reviewer` was already at `high`, since it runs after every change and higher effort in review trades precision for recall — a reviewer that pads each cycle with speculative findings costs triage time, which is a quality cost as well as a speed cost. `ultrathink` remains the per-dispatch escalation for a security-sensitive review.
 
-**Executors run Opus at `medium`; Sonnet covers mechanical work and spec tests.** Opus carries the execution-heavy roles: standard implementation (`coding-worker`, `medium`) and QA's long tool-call loops (`qa-engineer`, `high`, because its reasoning goes into judging what counts as a regression while its writes are throwaway scaffolding), plus `doc-reviewer` at `high`, whose semantic drift checks are judgment work. `coding-worker` and `qa-engineer` moved from Sonnet 5 on 2026-09-22: in Anthropic's testing, Opus 5.5 at `medium` matches or beats Opus 5 at `high` on coding, with fewer tokens per task. This has not yet been measured on Autobots tasks. Sonnet handles fast mechanical work, where turn speed is the point: `fast-coding-worker` at `medium` and `helper-worker` at `low`. `fast-coding-worker` moved from `low` to `medium` on 2026-09-30, once cost stopped being a constraint: the claude-api model guide recommends `medium` for agentic coding and warns that `low` is more likely to skip verifying changes. A local 60-session eval on ten coding cases found no pass-rate difference (30/30 each) and 1.06× the median wall time. Those two roles ran on Haiku 4.5 until 2026-09-22; they moved because Haiku 4.5 is eligible for retirement from October 15, 2026, has no successor, and has a February 2025 knowledge cutoff. The roster has no Haiku role. `spec-test-writer` (`high`) is on Sonnet because the role needs a model different from the implementer `coding-worker` (Opus), and the requirement-level judgment sits with `planner` and the owner upstream.
+**Executors run Opus at `medium`; Haiku and Sonnet cover mechanical work, and Sonnet writes spec tests.** Opus carries the execution-heavy roles: standard implementation (`coding-worker`, `medium`) and QA's long tool-call loops (`qa-engineer`, `high`, because its reasoning goes into judging what counts as a regression while its writes are throwaway scaffolding), plus `doc-reviewer` at `high`, whose semantic drift checks are judgment work. `coding-worker` and `qa-engineer` moved from Sonnet 5 on 2026-09-22: in Anthropic's testing, Opus 5.5 at `medium` matches or beats Opus 5 at `high` on coding, with fewer tokens per task. This has not yet been measured on Autobots tasks. Fast mechanical work, where turn speed is the point, runs on the smaller tiers: `fast-coding-worker` on Haiku at `medium` and `helper-worker` on Sonnet at `low`. Those two roles ran on Haiku 4.5 until 2026-09-22; they moved to Sonnet because Haiku 4.5 was eligible for retirement from October 15, 2026, had no successor at the time, and had a February 2025 knowledge cutoff. `fast-coding-worker` moved from `low` to `medium` on Sonnet on 2026-09-30, once cost stopped being a constraint: the claude-api model guide recommends `medium` for agentic coding and warns that `low` is more likely to skip verifying changes. A local 60-session eval on ten coding cases found no pass-rate difference (30/30 each) and 1.06× the median wall time. `fast-coding-worker` returned to Haiku, now Haiku 5.5, on 2026-10-09. On the same ten cases, three runs each, Haiku 5.5 passed 27/30 at `low` (one case failed all three runs), 29/30 at `medium`, and 29/30 at `high` (local eval; results are kept out of the repo under `evals/roles/fast-coding-worker/`), and the pre-registered rule picked `medium`: the lowest effort within one pass of the best with no case failing every run. Sonnet 5.5 at `medium` had passed 30/30; Haiku's one miss at `medium` was a fix that had to keep existing fixture evals green. `spec-test-writer` (`high`) is on Sonnet because the role needs a model different from the implementer `coding-worker` (Opus), and the requirement-level judgment sits with `planner` and the owner upstream.
 
 | Role | Agenticons model | Claude alias | Resolves to (Claude Code 2.1.255+) |
 |---|---|---|---|
 | `planner` | `gpt-5.5` | `fable` | Fable 5.1 |
 | `coding-worker` | `gpt-5.3-codex` | `opus` | Opus 5.5 |
-| `fast-coding-worker` | `gpt-5.3-codex-spark` | `sonnet` | Sonnet 5.5 |
+| `fast-coding-worker` | `gpt-5.3-codex-spark` | `haiku` | Haiku 5.5 (Claude Code 2.1.293 or later) |
 | `helper-worker` | `gpt-5.4-mini` | `sonnet` | Sonnet 5.5 |
 | `forensic-analyst` | `gpt-5.5` | `fable` | Fable 5.1 |
 | `doc-reviewer` | `gpt-5.4-mini` | `opus` | Opus 5.5 |
@@ -65,9 +65,9 @@ Autobots uses a **task-fit** mapping: every Claude tier is used for the work it 
 | `advisor` | — (Autobots-only) | `fable` | Fable 5.1 |
 | `spec-test-writer` | — (Autobots-only) | `sonnet` | Sonnet 5.5 |
 
-Distribution: **5 Fable · 3 Opus · 3 Sonnet · 0 Haiku** (eleven roles; `advisor` and `spec-test-writer` are Autobots additions with no Agenticons counterpart — see the advisory pattern in Multi-Agent Patterns and the spec-first recipe in the dispatch contract).
+Distribution: **5 Fable · 3 Opus · 2 Sonnet · 1 Haiku** (eleven roles; `advisor` and `spec-test-writer` are Autobots additions with no Agenticons counterpart — see the advisory pattern in Multi-Agent Patterns and the spec-first recipe in the dispatch contract).
 
-Specs use the family alias (`fable`/`opus`/`sonnet`/`haiku`) in the `model:` field, deliberately: an alias resolves to the newest model Claude Code knows for that family, so a role tracks new releases as soon as Claude Code is updated, with no roster edit. What is fixed per role is the *family* (the tier), the effort, and the access class — not the version. Autobots assumes the Anthropic API provider; alias resolution differs by provider (see [Claude Code's alias table](https://code.claude.com/docs/en/model-config#model-aliases)). The "resolves to" column above is what the aliases mean on Claude Code 2.1.255 or later; before 2.1.255, `fable` resolved to Fable 5. Two things can break the "newest model" property, and the installer warns on both: an older Claude Code build, and an `ANTHROPIC_DEFAULT_FABLE_MODEL`/`_OPUS_MODEL`/`_SONNET_MODEL` environment variable, which redirects the alias outright (Claude Code also accepts full model IDs such as `claude-fable-5-1` in `model:`; pinning one is the stricter-reproducibility alternative, rejected here because it would freeze the roster on a version until someone edits it). Because the resolution column is a snapshot, any doc line that names a concrete model version must say which Claude Code version it is true for. The model IDs a routing-gate run actually tested are recorded as `resolved_models` in its `evals/results/*.json` file.
+Specs use the family alias (`fable`/`opus`/`sonnet`/`haiku`) in the `model:` field, deliberately: an alias resolves to the newest model Claude Code knows for that family, so a role tracks new releases as soon as Claude Code is updated, with no roster edit. What is fixed per role is the *family* (the tier), the effort, and the access class — not the version. Autobots assumes the Anthropic API provider; alias resolution differs by provider (see [Claude Code's alias table](https://code.claude.com/docs/en/model-config#model-aliases)). The "resolves to" column above is what the aliases mean on Claude Code 2.1.255 or later, except `haiku` → Haiku 5.5, which needs Claude Code 2.1.293 or later (earlier builds resolve `haiku` to Haiku 4.5, which ignores `effort`); before 2.1.255, `fable` resolved to Fable 5. Two things can break the "newest model" property, and the installer warns on both: an older Claude Code build, and an `ANTHROPIC_DEFAULT_FABLE_MODEL`/`_OPUS_MODEL`/`_SONNET_MODEL`/`_HAIKU_MODEL` environment variable, which redirects the alias outright (Claude Code also accepts full model IDs such as `claude-fable-5-1` in `model:`; pinning one is the stricter-reproducibility alternative, rejected here because it would freeze the roster on a version until someone edits it). Because the resolution column is a snapshot, any doc line that names a concrete model version must say which Claude Code version it is true for. The model IDs a routing-gate run actually tested are recorded as `resolved_models` in its `evals/results/*.json` file.
 
 ### Model-routing caveat: `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`
 
@@ -88,7 +88,7 @@ Autobots pins every role at step 2, so `CLAUDE_CODE_SUBAGENT_MODEL` by itself is
 |---|---|---:|---|---|
 | `planner` | read-only | Fable | high | Architecture, decomposition, sequencing, risk analysis |
 | `coding-worker` | writable | Opus | medium | Normal implementation, bug fixes, refactors |
-| `fast-coding-worker` | writable | Sonnet | medium | Small localized edits and quick fixes |
+| `fast-coding-worker` | writable | Haiku | medium | Small localized edits and quick fixes |
 | `helper-worker` | read-only | Sonnet | low | Quick lookup, repo reconnaissance, evidence gathering |
 | `forensic-analyst` | read-only | Fable | high | Deep root-cause investigation, intermittent and cross-system failures, forensic reports |
 | `doc-reviewer` | read-only | Opus | high | Documentation correctness and drift review |
@@ -98,7 +98,7 @@ Autobots pins every role at step 2, so `CLAUDE_CODE_SUBAGENT_MODEL` by itself is
 | `advisor` | read-only | Fable | high | Guidance-only consultant for the advisory pattern: returns a plan, correction, or stop signal; never edits, never produces user-facing output |
 | `spec-test-writer` | writable | Sonnet | high | Writes spec tests from requirements, plans, issues, and the interface before implementation; never sees the planned implementation; edits only test files and test fixtures; confirms each test fails for the right reason |
 
-The roles, responsibilities, and read-only/writable split carry over from Agenticons' original nine, plus two Autobots-only additions: `advisor`, which exists for the advisory pattern, and `spec-test-writer`, which writes spec tests before implementation; neither has an Agenticons counterpart. Effort levels are not a straight port, though: parity with Agenticons' `model_reasoning_effort` assignments was never a design goal, and they were tuned instead for the Claude model family and this package's own task-fit rationale (see Model Mapping). No role runs on Haiku: `helper-worker` on Sonnet at `low` effort is the floor for fast, mechanical work.
+The roles, responsibilities, and read-only/writable split carry over from Agenticons' original nine, plus two Autobots-only additions: `advisor`, which exists for the advisory pattern, and `spec-test-writer`, which writes spec tests before implementation; neither has an Agenticons counterpart. Effort levels are not a straight port, though: parity with Agenticons' `model_reasoning_effort` assignments was never a design goal, and they were tuned instead for the Claude model family and this package's own task-fit rationale (see Model Mapping).
 
 ## Agent Spec Contract
 
@@ -109,7 +109,7 @@ Each `.claude/agents/<name>.md` file is YAML frontmatter followed by a Markdown 
 | `name` | Yes | Spawnable identifier. `kebab-case`; must match the filename without `.md`. |
 | `description` | Yes | When to use the role. Drives automatic delegation; includes `<example>` trigger blocks. |
 | `model` | Yes | `fable`, `opus`, `sonnet`, or `haiku` — the pinned tier for the role. |
-| `effort` | Fable/Opus/Sonnet roles | `low` through `xhigh` — the pinned reasoning effort. Omitted on Haiku roles (unsupported; none in the current roster). |
+| `effort` | Yes | `low` through `max` — the pinned reasoning effort, set on every role, Haiku included. |
 | `tools` | Yes | Explicit allowlist encoding the role's access class. Never includes `Agent`. |
 | `color` | No | Optional UI color for the role. |
 | system prompt | Yes (body) | Role behavior and output contract — the equivalent of Agenticons' `developer_instructions`. |
@@ -160,8 +160,8 @@ Agenticons sets a per-agent `model_reasoning_effort` (`low` → `xhigh`). Claude
 
 Two caveats shape the rendering:
 
-- **Haiku has no effort support.** The `effort` setting applies to the Fable, Opus, and Sonnet families; Haiku ignores it. The roster has no Haiku role — `helper-worker` on Sonnet at `low` effort is the floor for fast, mechanical work.
-- **An omitted `effort` inherits the session's level.** A role that leaves `effort` unset runs at whatever `/effort` the user's session is on (Claude Code's default is `high` for current Fable, Opus, and Sonnet models). Autobots therefore sets `effort` explicitly on every Fable/Opus/Sonnet role to encode the contract rather than lean on the session — including `coding-worker`/`fast-coding-worker: medium` and `helper-worker: low`, which must be explicit to avoid silently running at the session default.
+- **Haiku supports effort from Haiku 5.5.** Haiku 4.5 ignored `effort`, so the roster used to omit it on Haiku roles. Haiku 5.5 supports it, so `fast-coding-worker` sets it like every other role.
+- **An omitted `effort` inherits the session's level.** A role that leaves `effort` unset runs at whatever `/effort` the user's session is on (Claude Code's default is `high` on Fable 5.1 and `medium` on Opus 5.5, Sonnet 5.5, and Haiku 5.5). Autobots therefore sets `effort` explicitly on every role, Haiku included, to encode the contract rather than lean on the session — including `coding-worker`/`fast-coding-worker: medium` and `helper-worker: low`, which must be explicit to avoid silently running at the session default.
 
 | Role | Agenticons `model_reasoning_effort` | Autobots `effort:` |
 |---|---|---|
@@ -253,7 +253,7 @@ Parallel writable work uses disjoint ownership. Where two writable workers might
 
 The [advisory pattern](https://claude.com/blog/the-advisor-strategy) inverts the default: a cost-effective executor drives the whole task end-to-end and escalates to a stronger model only at decision points it cannot reasonably resolve. The advisor never edits files and never produces user-facing output — it returns a plan, a correction, or a stop signal, and the executor resumes. The pattern trades peak capability for cost; Anthropic reports Sonnet with an Opus advisor scoring 2.7 percentage points higher on SWE-bench Multilingual than Sonnet alone at 11.9% lower cost per task.
 
-**Roles.** One writable executor — `coding-worker` (Opus) for normal work, or `fast-coding-worker` (Sonnet at `medium`) for small localized edits — plus the read-only `advisor` role (Fable, `high`).
+**Roles.** One writable executor — `coding-worker` (Opus) for normal work, or `fast-coding-worker` (Haiku at `medium`) for small localized edits — plus the read-only `advisor` role (Fable, `high`).
 
 **Flow (parent-mediated).**
 
@@ -286,10 +286,10 @@ Two Claude Code distribution units are available; Autobots deliberately chooses 
 It checks:
 
 - every `.claude/agents/*.md` file has a parseable YAML frontmatter block and a non-empty system-prompt body
-- required frontmatter fields are present and non-blank: `name`, `description`, `model`, `tools`
+- required frontmatter fields are present and non-blank: `name`, `description`, `model`, `tools` (`effort` presence is checked under VAL-5)
 - each agent's `name` matches its filename and names are unique
 - `model` is one of the supported aliases (`fable`, `opus`, `sonnet`, `haiku`)
-- `effort`, when present, is one of `low`/`medium`/`high`/`xhigh`/`max`, and is **absent on Haiku roles** (where it is inert)
+- `effort` is present on every role and is one of `low`/`medium`/`high`/`xhigh`/`max`
 - `tools` is well-formed and **never contains `Agent`** (enforcing non-delegation), and the **derived access class** (writable iff `tools` includes `Edit` or `Write`) matches the Access column in `docs/design.md`
 - `README.md`, `SKILL.md`, `docs/design.md`, `docs/faq.md`, and `docs/cheatsheet.md` mention every configured agent as a standalone identifier (a mention embedded in a longer role name, such as `reviewer` inside `doc-reviewer`, does not count)
 - `README.md`, `docs/design.md`, and `docs/cheatsheet.md` document each agent with its configured model on one line
@@ -329,7 +329,7 @@ Only the destination paths change:
 | Skill | `.claude/skills/autobots/SKILL.md` | `~/.claude/skills/autobots/SKILL.md` |
 | Agents | `.claude/agents/<name>.md` | `~/.claude/agents/<name>.md` |
 
-The script works from a local checkout and through a raw GitHub pipe, where it downloads `SKILL.md` and `.claude/agents/*.md` from the selected ref. It should additionally warn when `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is set in the environment, since that silently overrides the per-role model routing (see the Model-routing caveat); when any `ANTHROPIC_DEFAULT_FABLE_MODEL`/`_OPUS_MODEL`/`_SONNET_MODEL` variable is set, since that redirects a family alias; and when the installed Claude Code is older than 2.1.255, since the aliases resolve to older models there (see Model Mapping). After install it advises the user to start a new Claude Code session so the skill and agents are picked up (subagent file edits require a session restart unless made via `/agents`; skill edits are picked up live).
+The script works from a local checkout and through a raw GitHub pipe, where it downloads `SKILL.md` and `.claude/agents/*.md` from the selected ref. It should additionally warn when `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is set in the environment, since that silently overrides the per-role model routing (see the Model-routing caveat); when any `ANTHROPIC_DEFAULT_FABLE_MODEL`/`_OPUS_MODEL`/`_SONNET_MODEL`/`_HAIKU_MODEL` variable is set, since that redirects a family alias; and when the installed Claude Code is older than 2.1.255, since the aliases resolve to older models there (see Model Mapping). After install it advises the user to start a new Claude Code session so the skill and agents are picked up (subagent file edits require a session restart unless made via `/agents`; skill edits are picked up live).
 
 ### `--symlink`: live-source installs
 
@@ -362,8 +362,8 @@ Patterns are part of the delegation contract as well. Adding or changing a patte
 2. **Spec format**: `.codex/agents/*.toml` → `.claude/agents/*.md` (YAML frontmatter + Markdown body).
 3. **Skill path**: `.agents/skills/agenticons/` → `.claude/skills/autobots/`; the dispatcher is also the `/autobots` slash command.
 4. **Names**: `snake_case` → `kebab-case`.
-5. **Models**: GPT tiers → Claude tiers, task-fit (5 Fable · 3 Opus · 2 Sonnet · 0 Haiku, with the model tier tracking each role's work shape and reasoning effort). Subject to the `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` override caveat.
-6. **Reasoning effort**: `model_reasoning_effort` field → Claude Code's per-subagent `effort:` field (near 1:1), omitted on Haiku roles because Haiku ignores it (none currently in the roster). Effort assignments were tuned for the Claude model family rather than ported 1:1 from Agenticons.
+5. **Models**: GPT tiers → Claude tiers, task-fit (5 Fable · 3 Opus · 2 Sonnet · 1 Haiku, with the model tier tracking each role's work shape and reasoning effort). Subject to the `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` override caveat.
+6. **Reasoning effort**: `model_reasoning_effort` field → Claude Code's per-subagent `effort:` field (near 1:1), set on every role, Haiku included. Effort assignments were tuned for the Claude model family rather than ported 1:1 from Agenticons.
 7. **Access control**: `sandbox_mode` field → `tools` allowlist (writable iff `Edit`/`Write` present). Shell-level write prevention needs a `PreToolUse` hook, which is why Autobots ships file-based rather than as a plugin.
 8. **No nested delegation**: `max_depth = 1` → omit the `Agent` tool from every role.
 9. **Nicknames**: `nickname_candidates` dropped; semantic labels remain a parent-side convention.
