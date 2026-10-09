@@ -490,6 +490,34 @@ test_empty_target_dies() {
   assert_contains "$RUN_STDERR" "requires a non-empty argument" "--target= error message"
 }
 
+# Runs --dry-run with a stub `claude` on PATH that reports the given version.
+# Leaves the warning (if any) in RUN_STDERR.
+run_with_claude_version() { # version
+  local checkout stub saved_path
+  checkout="$(new_checkout)"
+  stub="$(mktemp -d "${TEST_ROOT}/claude-stub.XXXXXX")"
+  printf '#!/usr/bin/env bash\necho "%s (Claude Code)"\n' "$1" >"${stub}/claude"
+  chmod +x "${stub}/claude"
+  saved_path="$PATH"
+  PATH="${stub}:${saved_path}"
+  run_install "${checkout}/scripts/install.sh" --target "$(new_target)" --dry-run
+  PATH="$saved_path"
+}
+
+test_claude_version_below_minimum_warns() {
+  printf '\n== claude 2.1.292 (below MIN_CLAUDE_VERSION 2.1.293) warns ==\n'
+  run_with_claude_version "2.1.292"
+  assert_eq "$RUN_EXIT" "0" "install still proceeds on an old claude"
+  assert_contains "$RUN_STDERR" "Claude Code 2.1.292 is older than 2.1.293" "old claude version warning names both versions"
+}
+
+test_claude_version_at_minimum_is_silent() {
+  printf '\n== claude 2.1.293 (at MIN_CLAUDE_VERSION) does not warn ==\n'
+  run_with_claude_version "2.1.293"
+  assert_eq "$RUN_EXIT" "0" "install exits 0 on minimum claude"
+  assert_not_contains "$RUN_STDERR" "is older than" "no version warning at the minimum"
+}
+
 # ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
@@ -516,6 +544,8 @@ main() {
   test_missing_source_dies_both_modes
   test_moved_checkout_recovery
   test_empty_target_dies
+  test_claude_version_below_minimum_warns
+  test_claude_version_at_minimum_is_silent
 
   printf '\n----------------------------------------\n'
   printf 'Results: %d run, %d failed\n' "$TESTS_RUN" "$TESTS_FAILED"

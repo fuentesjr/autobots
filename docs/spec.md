@@ -262,7 +262,7 @@ The advisor MUST NOT edit files and MUST NOT produce user-facing output.
 
 `INS-5` The installer MUST NOT overwrite existing, differing files unless `--force` is given, and MUST make no writes under `--dry-run`.
 
-`INS-6` The installer MUST warn when `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is set in the environment, because it silently overrides per-role model routing (`MDL-3`). It MUST also warn when any `ANTHROPIC_DEFAULT_FABLE_MODEL`/`ANTHROPIC_DEFAULT_OPUS_MODEL`/`ANTHROPIC_DEFAULT_SONNET_MODEL`/`ANTHROPIC_DEFAULT_HAIKU_MODEL` variable is set, because it redirects the family alias a role pins (`MDL-1`), and when the installed `claude` is older than 2.1.255, because the aliases resolve to older models there. The version check MUST be skipped silently when `claude` is not on `PATH`.
+`INS-6` The installer MUST warn when `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is set in the environment, because it silently overrides per-role model routing (`MDL-3`). It MUST also warn when any `ANTHROPIC_DEFAULT_FABLE_MODEL`/`ANTHROPIC_DEFAULT_OPUS_MODEL`/`ANTHROPIC_DEFAULT_SONNET_MODEL`/`ANTHROPIC_DEFAULT_HAIKU_MODEL` variable is set, because it redirects the family alias a role pins (`MDL-1`), and when the installed `claude` is older than 2.1.293, because the aliases resolve to older models there. The version check MUST be skipped silently when `claude` is not on `PATH`.
 
 `INS-7` After install, the installer MUST advise the user to start a new Claude Code session so the agents are picked up (subagent file edits require a session restart unless made via `/agents`; skill edits are picked up live).
 

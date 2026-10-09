@@ -209,7 +209,7 @@ fi
 
 # Roles pin family aliases (fable/opus/sonnet/haiku) so they track the newest model
 # per family. ANTHROPIC_DEFAULT_*_MODEL redirects an alias outright, and on
-# Claude Code older than 2.1.255 the aliases resolve to older models.
+# Claude Code older than 2.1.293 the aliases resolve to older models.
 for alias_var in ANTHROPIC_DEFAULT_FABLE_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL; do
   if [ -n "${!alias_var:-}" ]; then
     warn "${alias_var} is set to '${!alias_var}'. It redirects the family alias that"
@@ -217,13 +217,14 @@ for alias_var in ANTHROPIC_DEFAULT_FABLE_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL ANTH
   fi
 done
 
-MIN_CLAUDE_VERSION="2.1.255"
+MIN_CLAUDE_VERSION="2.1.293"
 if command -v claude >/dev/null 2>&1; then
   CLAUDE_VERSION="$(claude --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)"
   if [ -n "$CLAUDE_VERSION" ] && [ "$CLAUDE_VERSION" != "$MIN_CLAUDE_VERSION" ] &&
      [ "$(printf '%s\n%s\n' "$CLAUDE_VERSION" "$MIN_CLAUDE_VERSION" | sort -t. -k1,1n -k2,2n -k3,3n | head -n1)" = "$CLAUDE_VERSION" ]; then
-    warn "Claude Code ${CLAUDE_VERSION} is older than ${MIN_CLAUDE_VERSION}. The 'fable' alias resolves to"
-    warn "Fable 5 there (Fable 5.1 from ${MIN_CLAUDE_VERSION}), and before 2.1.251 CLAUDE_CODE_SUBAGENT_MODEL"
+    warn "Claude Code ${CLAUDE_VERSION} is older than ${MIN_CLAUDE_VERSION}. The roster's aliases resolve to its"
+    warn "newest models (Fable 5.1, Opus 5.5, Sonnet 5.5, Haiku 5.5) only from ${MIN_CLAUDE_VERSION}; older builds"
+    warn "run older models (Haiku 4.5 ignores effort). Before 2.1.251 CLAUDE_CODE_SUBAGENT_MODEL"
     warn "overrides per-role routing. Update Claude Code to get the roster's newest models."
   fi
 fi
