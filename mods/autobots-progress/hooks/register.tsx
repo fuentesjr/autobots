@@ -397,6 +397,35 @@ const elapsed = (a: AgentRun, at: number): number => (a.endedAt ?? Math.max(at, 
 // Leading shell assignments: `NAME=value`, the value bare, "double-quoted" or 'single-quoted'.
 const ASSIGNMENTS = /^(?:[A-Za-z_][A-Za-z0-9_]*=(?:"(?:[^"\\]|\\.)*"|'[^']*'|[^\s"']*)(?:\s+|$))*/
 
+// Shapes of a key or secret inside a search pattern. A heuristic, so each line names what it catches.
+const SECRET_SHAPES: RegExp[] = [
+  // Known key prefixes, at a word start so that `task-runner` or `kiosk-mode` is not `sk-`.
+  /\b(?:sk-|[sr]k_(?:live|test)_|gh[pousr]_|github_pat_|xox[abeprs]-|xapp-|glpat-|whsec_|AIza)[A-Za-z0-9_-]{8,}/,
+  // npm and Hugging Face tokens; a long tail, so that `npm_package_version` or `hf_hub_download` is not one.
+  /\b(?:npm_|hf_)[A-Za-z0-9]{16,}/,
+  // An AWS access key id, and a 40-character AWS secret access key standing alone.
+  /\b(?:AKIA|ASIA)[A-Z0-9]{16}/,
+  /(?<![A-Za-z0-9\/+])[A-Za-z0-9\/+]{40}(?![A-Za-z0-9\/+])/,
+  // A PEM private-key header, and a JWT.
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
+  /eyJ[\w-]+\.eyJ[\w-]+\./,
+  // Credentials in a URL: `//user:password@`.
+  /\/\/[^\s\/@:]+:[^\s\/@]+@/,
+  // A sensitive name, with any suffix (`secret_key`, `x-api-key`), then `=` or `:` and a value.
+  /(?:password|passwd|secret|token|api[_-]?key|authorization)[\w-]*["']?\s*[:=]\s*["']?[^\s"']/i,
+  // A bearer token.
+  /\bbearer\s+[A-Za-z0-9._~+\/-]{8,}/i,
+]
+
+// Whether a search pattern looks like it holds a key or secret: one of the shapes above, or a
+// long random-looking run of letters and digits (hex digests included). A pattern over 512
+// characters counts as secret unread, which also bounds the regexes' running time.
+// A bare short password with nothing naming it passes.
+const looksSecret = (s: string): boolean =>
+  s.length > 512 ||
+  SECRET_SHAPES.some(shape => shape.test(s)) ||
+  (s.match(/[A-Za-z0-9]{20,}/g) ?? []).some(run => /\d/.test(run) && /[A-Za-z]/.test(run))
+
 // A tool call as the panel may show it: the tool's name and at most a short,
 // non-sensitive target. Never a full command, URL, query or path.
 const summarizeTool = (name: string, input: unknown): string => {
@@ -406,7 +435,12 @@ const summarizeTool = (name: string, input: unknown): string => {
   }
   let target = ''
   if (['Read', 'Edit', 'Write', 'NotebookEdit'].includes(name)) target = field('file_path').split(/[\\/]/).pop() ?? ''
-  else if (name === 'Grep' || name === 'Glob') target = clip(field('pattern'), 24)
+  else if (name === 'Grep' || name === 'Glob') {
+    // Glob shows only its pattern's last segment, never a directory. Either is checked whole,
+    // before the cut, so a secret past the 24th character still hides it.
+    const pattern = name === 'Glob' ? field('pattern').split(/[\\/]/).pop() ?? '' : field('pattern')
+    target = looksSecret(pattern) ? '' : clip(pattern, 24)
+  }
   else if (name === 'Bash') {
     // The command's file name only: past any `NAME=value` prefixes (values bare or quoted,
     // spaces and all), unquoted, without directories. An assignment the pattern cannot close,

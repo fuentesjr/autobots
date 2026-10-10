@@ -701,24 +701,187 @@ describe('agent activity in the agents panel', () => {
     }
   })
 
-  test('the row shows a Glob call as Glob and its pattern', async ($, on) => {
+  // Requirement of 2026-10-10 (owner decision): the panel never displays an API key or secret through a
+  // Grep or Glob pattern. Glob shows only the last segment of its pattern, never a directory.
+  test('the row shows a Glob call as Glob and the last segment of its pattern, without directories', async ($, on) => {
     const w = await stage($, on)
     await spawnSubagent($, 'coding-worker')
     await w.step(WORKER, [{ name: 'Glob', input: { pattern: 'src/**/*.rb' } }])
-    for (const surface of SURFACES) expect(shows(await w.panel(surface), 'Glob src/**/*.rb'), `Glob src/**/*.rb on the ${surface}`).toBe(true)
+    for (const surface of SURFACES) {
+      const strings = await w.panel(surface)
+      expect(shows(strings, 'Glob *.rb'), `Glob *.rb on the ${surface}`).toBe(true)
+      expect(hides(strings, 'src'), `no directory on the ${surface}`).toBe(true)
+    }
   })
 
   test('the row shows a Grep call as Grep and its pattern, the shown pattern at most 24 characters', async ($, on) => {
     const w = await stage($, on)
     await spawnSubagent($, 'coding-worker')
-    // 36 characters; the 25th is the capital Y.
-    await w.step(WORKER, [{ name: 'Grep', input: { pattern: 'abcdefghijklmnopqrstuvwxYZ0123456789' } }])
+    // 41 characters, nothing secret-like; the 25th is the underscore after "band". The lead checked is shorter than 24
+    // so that a trailing ellipsis counted inside the 24 is allowed.
+    await w.step(WORKER, [{ name: 'Grep', input: { pattern: 'def render_progress_band_for_the_terminal' } }])
     for (const surface of SURFACES) {
       const strings = await w.panel(surface)
-      expect(shows(strings, 'Grep abcdefghijklmnop'), `the pattern leads on the ${surface}`).toBe(true)
-      expect(hides(strings, 'abcdefghijklmnopqrstuvwxY'), `no more than 24 characters on the ${surface}`).toBe(true)
+      expect(shows(strings, 'Grep def render_progress'), `the pattern leads on the ${surface}`).toBe(true)
+      expect(hides(strings, 'def render_progress_band_'), `no more than 24 characters on the ${surface}`).toBe(true)
     }
   })
+
+  // The row reads "<N> calls · <Tool> <target> · <N>s ago"; a tool shown alone has no target between it and the next " · " (or the row's end).
+  const showsToolAlone = (strings: string[], tool: string): boolean => strings.some(t => new RegExp(`(^|· )${tool}( ·|$)`).test(t))
+
+  // Every 8-character window of the text: if any appears in the panel, part of it is shown.
+  const windows = (text: string): string[] => Array.from({ length: Math.max(1, text.length - 7) }, (_, i) => text.slice(i, i + 8))
+
+  // The fakes are built by concatenation so that this file does not itself trip a secret scanner.
+  const GHP = 'gh' + 'p_' + 'aB3dE5gH7jK9mN1pQ3sT5vW7yZ9bC1dE3fG5'
+  const SECRET_PATTERNS: Record<string, string> = {
+    'an Anthropic key': 'sk-' + 'ant-api03-' + 'Hk4Jd82LmQx7Vn3Pz9TrYb5Wc1Fs6GaE0uOi',
+    'an OpenAI key': 'sk-' + 'proj-' + 'Rt7Yb2Nk9Xc4Vm1Lq8Ws3Dz6Fh5Gj0Pa',
+    'a GitHub classic token': GHP,
+    'a GitHub fine-grained token': 'github' + '_pat_' + '11ABCDEFG0aBcDeFgHiJkL_mNoPqRsTuVwXyZ0123456789aBcDeFgHiJkLmNoPqRsTuVwXyZ',
+    'an AWS access key id': 'AK' + 'IA' + 'Q7XN4M2LP9RT5HDW',
+    'a Slack token': 'xox' + 'b-' + '2849301726354-9182736450192-Kd8Fj3Lm5Np7Qr9StUvWxYz1',
+    'a GitLab token': 'gl' + 'pat-' + 'Xy7Kd2Lm9Np4Qr6StUv8',
+    'a Google API key': 'AI' + 'za' + 'SyD4kL9mQ2xR7vN5pT8wB3cF6hJ1sY0uEaG',
+    'a JWT': 'ey' + 'J' + 'hbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.' + 'ey' + 'J' + 'zdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4ifQ.' + 'SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJVadQssw5c',
+    'a PEM private key header': '-----BEGIN ' + 'RSA PRIVATE KEY-----',
+    'a password assignment': 'pass' + 'word=hunter2',
+    'a quoted api_key assignment': 'api_' + 'key: "abc123"',
+    'a SECRET_TOKEN assignment': 'SECRET_' + 'TOKEN=xyz789',
+    'an Authorization bearer header': 'Authorization: ' + 'Bearer abc.def',
+    'a long random-looking mixed-case run': 'Zq8vR2mXk4LpT9wB7nC3dF6hJ1sY5uE0',
+    'a 40-character hex string': '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b',
+    'a key after a harmless prefix longer than 24 characters': 'def some_long_function_name|' + GHP,
+    'a secret_key assignment': 'secret_' + 'key=abc123def',
+    'a SECRET_KEY_BASE assignment': 'SECRET_' + 'KEY_BASE=abc123def',
+    'a client_secret assignment': 'client_' + 'secret=abc123def',
+    'an aws_secret_access_key assignment': 'aws_' + 'secret_access_key=abc123def',
+    'an x-api-key header': 'x-api-' + 'key: abc123def',
+    'an api-key header': 'api-' + 'key: abc123def',
+    'an AWS secret access key': 'wJalrXUtnFEMI/K7' + 'MDENG/bPxRfiCYEXAMPLEKEY',
+    'URL credentials': 'mysql://user:' + 'p4ssw0rd@host/db',
+    'a Stripe live key': 'sk_' + 'live_' + '4eC39HqLyjWDarjtT1zdp7dc',
+    'a partial Stripe search': 'sk_' + 'live_4eC39HqLyjW',
+    'an npm token': 'npm' + '_Xy7Kd2Lm9Np4Qr6StUv8Wx1Yz3Ab5Cd7Ef9G',
+    'a Hugging Face token': 'hf' + '_aBcDeFgHiJkLmNoPqRsTuVwXyZaBcDeFgH',
+  }
+
+  for (const [kind, pattern] of Object.entries(SECRET_PATTERNS)) {
+    test(`a Grep call whose pattern is ${kind} shows Grep alone, with no part of the pattern in the panel`, async ($, on) => {
+      const w = await stage($, on)
+      await spawnSubagent($, 'coding-worker')
+      await w.step(WORKER, [{ name: 'Grep', input: { pattern } }])
+      for (const surface of SURFACES) {
+        const strings = await w.panel(surface)
+        expect(showsToolAlone(strings, 'Grep'), `the row shows Grep alone on the ${surface}`).toBe(true)
+        for (const part of windows(pattern)) expect(hides(strings, part), `"${part}" of the pattern is not shown on the ${surface}`).toBe(true)
+      }
+    })
+  }
+
+  const HARMLESS_PATTERNS = ['needle', 'access_token', 'password', 'api_key', '\\bsecret\\b', 'TODO|FIXME', 'function\\s+\\w+', '[A-Z][a-z]+Error', 'def render_band',
+    // Words that merely resemble a secret's vocabulary or shape (review of the secret-hiding rule).
+    'token count', 'password reset', 'the secret garden', 'Authorization header', 'task-runner-handler', 'disk-usage-report', 'kiosk-mode-enabled', 'ASIAN-american-history']
+  for (const pattern of HARMLESS_PATTERNS) {
+    test(`a Grep call whose pattern is ${pattern} shows Grep ${pattern}`, async ($, on) => {
+      const w = await stage($, on)
+      await spawnSubagent($, 'coding-worker')
+      await w.step(WORKER, [{ name: 'Grep', input: { pattern } }])
+      for (const surface of SURFACES) expect(shows(await w.panel(surface), `Grep ${pattern}`), `Grep ${pattern} on the ${surface}`).toBe(true)
+    })
+  }
+
+  test("a Grep call's other inputs, path and glob, never appear in the panel", async ($, on) => {
+    const w = await stage($, on)
+    await spawnSubagent($, 'coding-worker')
+    await w.step(WORKER, [{ name: 'Grep', input: { pattern: 'needle', path: '/Users/sal/private-client', glob: '*.zqxext' } }])
+    for (const surface of SURFACES) {
+      const strings = await w.panel(surface)
+      expect(shows(strings, 'Grep needle'), `Grep needle on the ${surface}`).toBe(true)
+      for (const hidden of ['/Users', 'private-client', 'zqxext']) expect(hides(strings, hidden), `no "${hidden}" on the ${surface}`).toBe(true)
+    }
+  })
+
+  for (const [pattern, shown] of [['**/register.tsx', 'register.tsx'], ['*.md', '*.md']]) {
+    test(`a Glob call with pattern ${pattern} shows Glob ${shown}`, async ($, on) => {
+      const w = await stage($, on)
+      await spawnSubagent($, 'coding-worker')
+      await w.step(WORKER, [{ name: 'Glob', input: { pattern } }])
+      for (const surface of SURFACES) expect(shows(await w.panel(surface), `Glob ${shown}`), `Glob ${shown} on the ${surface}`).toBe(true)
+    })
+  }
+
+  test('a Glob call with an absolute pattern shows only the last segment and no directory of it', async ($, on) => {
+    const w = await stage($, on)
+    await spawnSubagent($, 'coding-worker')
+    await w.step(WORKER, [{ name: 'Glob', input: { pattern: '/Users/sal/private-client/**/*.rb' } }])
+    for (const surface of SURFACES) {
+      const strings = await w.panel(surface)
+      expect(shows(strings, 'Glob *.rb'), `Glob *.rb on the ${surface}`).toBe(true)
+      for (const hidden of ['Users', 'sal', 'private-client']) expect(hides(strings, hidden), `no "${hidden}" on the ${surface}`).toBe(true)
+    }
+  })
+
+  test('the shown Glob segment is at most 24 characters', async ($, on) => {
+    const w = await stage($, on)
+    await spawnSubagent($, 'coding-worker')
+    // The last segment is 40 characters; the 25th is the underscore after "for".
+    await w.step(WORKER, [{ name: 'Glob', input: { pattern: 'lib/render_progress_band_for_the_terminal.rb' } }])
+    for (const surface of SURFACES) {
+      const strings = await w.panel(surface)
+      expect(shows(strings, 'Glob render_progress'), `the segment leads on the ${surface}`).toBe(true)
+      expect(hides(strings, 'render_progress_band_for_'), `no more than 24 characters on the ${surface}`).toBe(true)
+    }
+  })
+
+  for (const [kind, pattern] of [['a GitHub token', 'src/**/' + GHP], ['a key after a harmless prefix longer than 24 characters', 'src/**/some_long_function_name|' + GHP]] as const) {
+    test(`a Glob call whose last segment is ${kind} shows Glob alone, with no part of it in the panel`, async ($, on) => {
+      const w = await stage($, on)
+      await spawnSubagent($, 'coding-worker')
+      await w.step(WORKER, [{ name: 'Glob', input: { pattern } }])
+      const segment = pattern.slice(pattern.lastIndexOf('/') + 1)
+      for (const surface of SURFACES) {
+        const strings = await w.panel(surface)
+        expect(showsToolAlone(strings, 'Glob'), `the row shows Glob alone on the ${surface}`).toBe(true)
+        for (const part of windows(segment)) expect(hides(strings, part), `"${part}" of the segment is not shown on the ${surface}`).toBe(true)
+      }
+    })
+  }
+
+  // Backslashes separate path segments too (Windows paths), so the directories of the pattern stay hidden.
+  for (const [pattern, hiddenParts] of [
+    ['src\\private-client\\**\\*.rb', ['src', 'private-client']],
+    ['C:\\Users\\sal\\secret-dir\\*.rb', ['Users', 'secret-dir']],
+  ] as const) {
+    test(`a Glob call with the backslash pattern ${pattern} shows Glob *.rb and no directory of it`, async ($, on) => {
+      const w = await stage($, on)
+      await spawnSubagent($, 'coding-worker')
+      await w.step(WORKER, [{ name: 'Glob', input: { pattern } }])
+      for (const surface of SURFACES) {
+        const strings = await w.panel(surface)
+        expect(shows(strings, 'Glob *.rb'), `Glob *.rb on the ${surface}`).toBe(true)
+        for (const hidden of hiddenParts) expect(hides(strings, hidden), `no "${hidden}" on the ${surface}`).toBe(true)
+      }
+    })
+  }
+
+  // A pattern this long shows no target (it is over the 24 characters), and reading it must stay fast.
+  for (const [kind, pattern] of [
+    ['a keyword followed by 100000 spaces', 'token' + ' '.repeat(100000)],
+    ['a quoted password followed by 100000 spaces and a quote', 'password"' + ' '.repeat(100000) + '"'],
+  ] as const) {
+    test(`a Grep call whose pattern is ${kind} shows Grep alone and the panel is read in under a second`, async ($, on) => {
+      const w = await stage($, on)
+      await spawnSubagent($, 'coding-worker')
+      const started = Date.now()
+      await w.step(WORKER, [{ name: 'Grep', input: { pattern } }])
+      const strings = await w.panel('terminal')
+      const elapsed = Date.now() - started
+      expect(elapsed, `step and panel took ${elapsed} ms`).toBeLessThan(1000)
+      expect(showsToolAlone(strings, 'Grep'), 'the row shows Grep alone').toBe(true)
+    })
+  }
 
   test('the row shows a Bash call as Bash and the first word of the command only', async ($, on) => {
     const w = await stage($, on)
