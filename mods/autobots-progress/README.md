@@ -4,6 +4,8 @@ A Claude Code mod for the autobots dispatcher: a progress bar above the prompt a
 
 - **Progress bar**: the dispatch title (`autobots` until one is reported), phase, accepted tasks out of planned, and a button with the crew size that opens the panel. It appears once the dispatcher reports progress or a roster subagent starts.
 - **Agents panel** (`/agents-info` toggles it): running, finished and planned subagents with role, model, effort, context, estimated cost and time. Subagents off the roster show in grey under their own type.
+  Each subagent's row also shows its activity: tool calls so far, the most recent tool, and, while it runs, how long ago its last model step was (`3 calls · Read a.rb · 12s ago`). Subagents do not report their own steps: the mod observes every model step. The panel shows each running worker's context fill as its bar, in grey.
+  The activity names only the tool and a short target: a file's basename, a search pattern cut to 24 characters, a URL's host, and for Bash only the command's file name (leading `NAME=value` assignments skipped, directories dropped, cut to 24 characters). It never shows a full command, URL, search query or path, and other tools show by name only. The whole summary is cut to 40 characters. On the terminal the activity follows the context, tokens, cost and time, so a narrow row drops it first.
 
 ## Load it
 
@@ -14,8 +16,6 @@ claude --plugin-dir mods/autobots-progress
 ## Tools it adds
 
 - `mcp__autobots-progress__progress`: the dispatcher reports the plan (each task with its `role`), phase and accepted tasks. The autobots `SKILL.md` drives it.
-
-Subagents do not report their own steps. The panel shows each running worker's context fill as its bar, in grey.
 
 Cost is a rough estimate from token counts and a built-in per-model price table (`PRICES` in `hooks/register.tsx`), not a bill.
 

@@ -4,7 +4,7 @@
 // discovered from what the mod does, not assumed.
 import { describe, expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
-import type { Engine } from 'claude-code/testing'
+import type { Engine, MockClock } from 'claude-code/testing'
 
 const ROSTER = [
   'planner',
@@ -32,15 +32,16 @@ type Harness = {
   stateWrites: { plugin: string; key: string; value: unknown }[]
   openedPanes: string[]
   closedPanes: string[]
+  clock: MockClock
 }
 
 // Boots the mod in a session. Only what the mod does not own sits beneath it:
 // the clock, the environment, the pane list, and the engine's own drawing.
 async function boot($: Engine, on: On): Promise<Harness> {
-  const h: Harness = { registeredTools: [], registeredCommands: [], stateWrites: [], openedPanes: [], closedPanes: [] }
+  const clock = mock.clock(on, { now: 1_000_000 })
+  const h: Harness = { registeredTools: [], registeredCommands: [], stateWrites: [], openedPanes: [], closedPanes: [], clock }
   const open = new Set<string>()
   mock.env(on, {})
-  mock.clock(on, { now: 1_000_000 })
 
   on('session.start', async (_$, e) => ({ cwd: e.cwd }))
   on('tool.register', async (_$, e) => {
@@ -416,5 +417,416 @@ describe('agents panel', () => {
     await spawnSubagent($, 'Explore', 'scan the repository')
     const shown = await panelStrings($, h)
     expect(shown.some(t => t.includes('Explore'))).toBe(true)
+  })
+})
+
+// What each subagent is doing is observed by the mod from the tool uses of each model step; the
+// agents report nothing. Every test reads the agents panel on the terminal and on the desktop.
+describe('agent activity in the agents panel', () => {
+  const SURFACES = ['terminal', 'desktop'] as const
+  type Surface = (typeof SURFACES)[number]
+  type ToolUse = { name: string; input: unknown }
+
+  // The test is the model API beneath the mod: it decides the tool uses of the next response, and
+  // answers the end of a subagent's run. Hooks beneath the plugins are registered before the session starts.
+  async function stage($: Engine, on: On) {
+    const usage = { input_tokens: 10, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, model: 'claude-sonnet-5-5' }
+    let toolUses: ToolUse[] = []
+    on('turn.step', async function* (_$, e) {
+      yield { kind: 'stop' as const, stopReason: 'tool_use' as const, usage }
+      return { turnId: e.turnId, index: e.index, answer: '', toolUses, stopReason: 'tool_use' as const, usage }
+    })
+    on('turn.complete', async (_$, e) => ({ text: e.answer }))
+    on('classic.SubagentStop', async () => ({}))
+    const h = await boot($, on)
+
+    let index = 0
+    return {
+      h,
+      // One model request of the loop `agentId` (the orchestrator's own when absent), answered with these tool uses.
+      async step(agentId: string | undefined, uses: ToolUse[]): Promise<void> {
+        toolUses = uses
+        const stream = $.turn.step({
+          turnId: 'turn-1',
+          index: index++,
+          model: 'claude-sonnet-5-5',
+          messageCount: 3,
+          ...(agentId ? { agentId } : {}),
+        })
+        for await (const _chunk of stream) {
+          // drain the stream
+        }
+        await stream.result
+      },
+      // The end of the subagent's run, as the engine raises it.
+      async finish(agentId: string, agentType: string): Promise<void> {
+        await $.turn.complete({ reason: 'answer', answer: 'done', durationMs: 1, isAborted: false, turnId: 'turn-1', agentId })
+        await $.classic.SubagentStop({ stop_hook_active: false, agent_id: agentId, agent_transcript_path: '', agent_type: agentType })
+      },
+      // Everything the open panel draws on a surface: element text, and the description of a drawing
+      // (the kit does not expose a drawing's pixels or markup).
+      async panel(surface: Surface): Promise<string[]> {
+        if (h.openedPanes.length === 0) await $.command.run({ command: 'agents-info', args: '' } as never)
+        expect(h.openedPanes.length, 'the agents panel is open').toBeGreaterThan(0)
+        const pane = await $.ui.mount({
+          plugin: 'autobots-progress',
+          surface,
+          component: 'Pane',
+          requestId: h.openedPanes[0],
+          props: {
+            title: 'Agents',
+            isFocused: false,
+            bodyColumns: 100,
+            placement: 'inline',
+            scroll: { offset: 0, bodyRows: 30 },
+            view: {},
+          },
+        })
+        const strings = (await pane.findAll({})).flatMap(el => [el.text, typeof el.props.alt === 'string' ? el.props.alt : ''])
+        await pane.unmount()
+        return strings.filter(Boolean)
+      },
+    }
+  }
+
+  const WORKER = 'agent-coding-worker'
+  const read = (file: string): ToolUse => ({ name: 'Read', input: { file_path: file } })
+
+  const showsCalls = (strings: string[], n: number): boolean =>
+    strings.some(t => (n === 1 ? /(^|\D)1 call(?!s)/ : new RegExp(`(^|\\D)${n} calls`)).test(t))
+  const shows = (strings: string[], text: string): boolean => strings.some(t => t.includes(text))
+  // A "<N>s/m/h ago" figure, which a running subagent shows and a finished one does not.
+  const AGO = /\d+[smh] ago/
+  // Whether the substring appears anywhere in what the panel draws.
+  const hides = (strings: string[], text: string): boolean => !strings.some(t => t.includes(text))
+
+  // ----- 1. call count
+
+  test('a subagent row shows its total tool calls summed across steps', async ($, on) => {
+    const w = await stage($, on)
+    await spawnSubagent($, 'coding-worker')
+    await w.step(WORKER, [read('/w/a.rb'), read('/w/b.rb')])
+    await w.step(WORKER, [read('/w/c.rb')])
+    for (const surface of SURFACES) expect(showsCalls(await w.panel(surface), 3), `3 calls on the ${surface}`).toBe(true)
+  })
+
+  test('a subagent row with exactly one tool call says 1 call', async ($, on) => {
+    const w = await stage($, on)
+    await spawnSubagent($, 'coding-worker')
+    await w.step(WORKER, [read('/w/a.rb')])
+    for (const surface of SURFACES) {
+      const strings = await w.panel(surface)
+      expect(showsCalls(strings, 1), `1 call on the ${surface}`).toBe(true)
+      expect(strings.some(t => /(^|\D)1 calls/.test(t)), `not "1 calls" on the ${surface}`).toBe(false)
+    }
+  })
+
+  test('a step with no tool uses changes neither the call count nor the last tool', async ($, on) => {
+    const w = await stage($, on)
+    await spawnSubagent($, 'coding-worker')
+    await w.step(WORKER, [read('/w/a.rb'), { name: 'Grep', input: { pattern: 'needle' } }])
+    await w.step(WORKER, [])
+    for (const surface of SURFACES) {
+      const strings = await w.panel(surface)
+      expect(showsCalls(strings, 2), `still 2 calls on the ${surface}`).toBe(true)
+      expect(shows(strings, 'Grep needle'), `still Grep needle on the ${surface}`).toBe(true)
+    }
+  })
+
+  // ----- 2. the most recent tool and its short target
+
+  for (const tool of ['Read', 'Edit', 'Write', 'NotebookEdit']) {
+    test(`the row shows the last ${tool} call as ${tool} and the file basename, never the directory`, async ($, on) => {
+      const w = await stage($, on)
+      await spawnSubagent($, 'coding-worker')
+      await w.step(WORKER, [{ name: tool, input: { file_path: '/Users/x/private/a.rb' } }])
+      for (const surface of SURFACES) {
+        const strings = await w.panel(surface)
+        expect(shows(strings, `${tool} a.rb`), `${tool} a.rb on the ${surface}`).toBe(true)
+        expect(hides(strings, 'private'), `no directory on the ${surface}`).toBe(true)
+        expect(hides(strings, '/Users'), `no path on the ${surface}`).toBe(true)
+      }
+    })
+  }
+
+  test('the row shows the most recent tool, not an earlier one', async ($, on) => {
+    const w = await stage($, on)
+    await spawnSubagent($, 'coding-worker')
+    await w.step(WORKER, [{ name: 'Edit', input: { file_path: '/w/first.rb' } }])
+    await w.step(WORKER, [{ name: 'Write', input: { file_path: '/w/older.rb' } }, { name: 'Read', input: { file_path: '/w/newest.rb' } }])
+    for (const surface of SURFACES) {
+      const strings = await w.panel(surface)
+      expect(shows(strings, 'Read newest.rb'), `the last tool of the last step on the ${surface}`).toBe(true)
+      expect(hides(strings, 'first.rb'), `no earlier step on the ${surface}`).toBe(true)
+      expect(hides(strings, 'older.rb'), `no earlier tool of the same step on the ${surface}`).toBe(true)
+    }
+  })
+
+  test('the row shows a Glob call as Glob and its pattern', async ($, on) => {
+    const w = await stage($, on)
+    await spawnSubagent($, 'coding-worker')
+    await w.step(WORKER, [{ name: 'Glob', input: { pattern: 'src/**/*.rb' } }])
+    for (const surface of SURFACES) expect(shows(await w.panel(surface), 'Glob src/**/*.rb'), `Glob src/**/*.rb on the ${surface}`).toBe(true)
+  })
+
+  test('the row shows a Grep call as Grep and its pattern, the shown pattern at most 24 characters', async ($, on) => {
+    const w = await stage($, on)
+    await spawnSubagent($, 'coding-worker')
+    // 36 characters; the 25th is the capital Y.
+    await w.step(WORKER, [{ name: 'Grep', input: { pattern: 'abcdefghijklmnopqrstuvwxYZ0123456789' } }])
+    for (const surface of SURFACES) {
+      const strings = await w.panel(surface)
+      expect(shows(strings, 'Grep abcdefghijklmnop'), `the pattern leads on the ${surface}`).toBe(true)
+      expect(hides(strings, 'abcdefghijklmnopqrstuvwxY'), `no more than 24 characters on the ${surface}`).toBe(true)
+    }
+  })
+
+  test('the row shows a Bash call as Bash and the first word of the command only', async ($, on) => {
+    const w = await stage($, on)
+    await spawnSubagent($, 'coding-worker')
+    await w.step(WORKER, [{ name: 'Bash', input: { command: 'git push --force origin main' } }])
+    for (const surface of SURFACES) {
+      const strings = await w.panel(surface)
+      expect(shows(strings, 'Bash git'), `Bash git on the ${surface}`).toBe(true)
+      for (const secret of ['push', 'force', 'origin']) expect(hides(strings, secret), `no "${secret}" on the ${surface}`).toBe(true)
+    }
+  })
+
+  // The privacy rule for Bash: environment assignments are skipped, the shown word is the basename of the
+  // first remaining token with surrounding quotes removed, at most 24 characters; nothing remaining: just Bash.
+  async function bashRow($: Engine, on: On, command: string) {
+    const w = await stage($, on)
+    await spawnSubagent($, 'coding-worker')
+    await w.step(WORKER, [{ name: 'Bash', input: { command } }])
+    return w
+  }
+
+  test('a Bash call skips leading environment assignments and shows the command word', async ($, on) => {
+    const w = await bashRow($, on, 'API_KEY=sk-live-123456 curl https://x.example/y')
+    for (const surface of SURFACES) {
+      const strings = await w.panel(surface)
+      expect(shows(strings, 'Bash curl'), `Bash curl on the ${surface}`).toBe(true)
+      for (const secret of ['API_KEY', 'sk-live', '123456', 'x.example']) expect(hides(strings, secret), `no "${secret}" on the ${surface}`).toBe(true)
+    }
+  })
+
+  test('a Bash call that is only an environment assignment shows Bash with nothing from the command', async ($, on) => {
+    const w = await bashRow($, on, 'ZQXVAR=zqxsecret')
+    for (const surface of SURFACES) {
+      const strings = await w.panel(surface)
+      expect(shows(strings, 'Bash'), `Bash on the ${surface}`).toBe(true)
+      for (const secret of ['ZQXVAR', 'zqxsecret']) expect(hides(strings, secret), `no "${secret}" on the ${surface}`).toBe(true)
+    }
+  })
+
+  test('a Bash call skips a leading assignment whose quoted value has spaces, never showing the value', async ($, on) => {
+    const w = await bashRow($, on, 'TOKEN="Bearer zqxsecret" curl https://x.example/y')
+    for (const surface of SURFACES) {
+      const strings = await w.panel(surface)
+      expect(shows(strings, 'Bash curl'), `Bash curl on the ${surface}`).toBe(true)
+      for (const secret of ['zqxsecret', 'Bearer', 'TOKEN', 'x.example']) expect(hides(strings, secret), `no "${secret}" on the ${surface}`).toBe(true)
+    }
+  })
+
+  test('a Bash call skips several leading assignments, quoted or not, before the command path', async ($, on) => {
+    // The values are distinctive so they cannot collide with other row text.
+    const w = await bashRow($, on, "A='zqxone zqxtwo' B=zqxthree ./bin/run.sh")
+    for (const surface of SURFACES) {
+      const strings = await w.panel(surface)
+      expect(shows(strings, 'Bash run.sh'), `Bash run.sh on the ${surface}`).toBe(true)
+      for (const secret of ['zqxone', 'zqxtwo', 'zqxthree', 'bin']) expect(hides(strings, secret), `no "${secret}" on the ${surface}`).toBe(true)
+    }
+  })
+
+  test('a Bash call to a path shows the basename of the command, never its directories', async ($, on) => {
+    const w = await bashRow($, on, '/Users/x/client-acme/scripts/deploy.sh prod')
+    for (const surface of SURFACES) {
+      const strings = await w.panel(surface)
+      expect(shows(strings, 'Bash deploy.sh'), `Bash deploy.sh on the ${surface}`).toBe(true)
+      for (const secret of ['client-acme', '/Users', 'scripts', 'prod']) expect(hides(strings, secret), `no "${secret}" on the ${surface}`).toBe(true)
+    }
+  })
+
+  test('a Bash call to a relative path shows the basename of the command, never its directories', async ($, on) => {
+    const w = await bashRow($, on, './secret-dir/run.sh')
+    for (const surface of SURFACES) {
+      const strings = await w.panel(surface)
+      expect(shows(strings, 'Bash run.sh'), `Bash run.sh on the ${surface}`).toBe(true)
+      expect(hides(strings, 'secret-dir'), `no directory on the ${surface}`).toBe(true)
+    }
+  })
+
+  test('a Bash call shows at most 24 characters of the command word', async ($, on) => {
+    // 60 characters with no slash; the 25th is the capital Y.
+    const w = await bashRow($, on, `abcdefghijklmnopqrstuvwx${'Y'.repeat(36)} --flag`)
+    for (const surface of SURFACES) {
+      const strings = await w.panel(surface)
+      expect(shows(strings, 'Bash abcdefghijklmnop'), `the word leads on the ${surface}`).toBe(true)
+      expect(hides(strings, 'abcdefghijklmnopqrstuvwxY'), `no more than 24 characters on the ${surface}`).toBe(true)
+    }
+  })
+
+  test('the row shows a WebFetch call as WebFetch and the URL host only', async ($, on) => {
+    const w = await stage($, on)
+    await spawnSubagent($, 'coding-worker')
+    await w.step(WORKER, [{ name: 'WebFetch', input: { url: 'https://example.com/secret/x?token=abc' } }])
+    for (const surface of SURFACES) {
+      const strings = await w.panel(surface)
+      expect(shows(strings, 'WebFetch example.com'), `WebFetch example.com on the ${surface}`).toBe(true)
+      for (const secret of ['secret', 'token=', 'abc', 'https']) expect(hides(strings, secret), `no "${secret}" on the ${surface}`).toBe(true)
+    }
+  })
+
+  test('the row shows a WebSearch call as WebSearch only, never the query', async ($, on) => {
+    const w = await stage($, on)
+    await spawnSubagent($, 'coding-worker')
+    await w.step(WORKER, [{ name: 'WebSearch', input: { query: 'how to rotate leaked credentials' } }])
+    for (const surface of SURFACES) {
+      const strings = await w.panel(surface)
+      expect(shows(strings, 'WebSearch'), `WebSearch on the ${surface}`).toBe(true)
+      for (const secret of ['rotate', 'leaked', 'credentials']) expect(hides(strings, secret), `no "${secret}" on the ${surface}`).toBe(true)
+    }
+  })
+
+  test('the row shows any other tool by its name only, nothing from its input', async ($, on) => {
+    const w = await stage($, on)
+    await spawnSubagent($, 'coding-worker')
+    await w.step(WORKER, [{ name: 'TodoWrite', input: { todos: [{ content: 'ship the hidden plan', status: 'pending' }] } }])
+    for (const surface of SURFACES) {
+      const strings = await w.panel(surface)
+      expect(shows(strings, 'TodoWrite'), `TodoWrite on the ${surface}`).toBe(true)
+      for (const secret of ['hidden', 'ship the', 'pending']) expect(hides(strings, secret), `no "${secret}" on the ${surface}`).toBe(true)
+    }
+  })
+
+  test('a running subagent shows no call count and no ago before its first tool call', async ($, on) => {
+    const w = await stage($, on)
+    await spawnSubagent($, 'coding-worker')
+    await w.step(WORKER, [])
+    await w.step(WORKER, [])
+    await w.h.clock.advance(9_000)
+    for (const surface of SURFACES) {
+      const strings = await w.panel(surface)
+      expect(hides(strings, 'call'), `no call count on the ${surface}`).toBe(true)
+      expect(strings.some(t => AGO.test(t)), `no ago on the ${surface}`).toBe(false)
+    }
+  })
+
+  // ----- 3. time since the last model step
+
+  test('a running subagent shows seconds since its last model step as <N>s ago under a minute', async ($, on) => {
+    const w = await stage($, on)
+    await spawnSubagent($, 'coding-worker')
+    await w.step(WORKER, [read('/w/a.rb')])
+    await w.h.clock.advance(12_000)
+    for (const surface of SURFACES) {
+      const strings = await w.panel(surface)
+      expect(shows(strings, '12s ago'), `12s ago on the ${surface}`).toBe(true)
+      expect(strings.some(t => /\dm ago|\dh ago/.test(t)), `no minutes or hours on the ${surface}`).toBe(false)
+    }
+  })
+
+  test('a running subagent shows minutes since its last model step as <N>m ago under an hour', async ($, on) => {
+    const w = await stage($, on)
+    await spawnSubagent($, 'coding-worker')
+    await w.step(WORKER, [read('/w/a.rb')])
+    await w.h.clock.advance(125_000)
+    for (const surface of SURFACES) {
+      const strings = await w.panel(surface)
+      expect(shows(strings, '2m ago'), `2m ago on the ${surface}`).toBe(true)
+      expect(strings.some(t => /\ds ago|\dh ago/.test(t)), `no seconds or hours on the ${surface}`).toBe(false)
+    }
+  })
+
+  test('a running subagent shows hours since its last model step as <N>h ago from an hour on', async ($, on) => {
+    const w = await stage($, on)
+    await spawnSubagent($, 'coding-worker')
+    await w.step(WORKER, [read('/w/a.rb')])
+    await w.h.clock.advance(2 * 3_600_000 + 5 * 60_000)
+    for (const surface of SURFACES) {
+      const strings = await w.panel(surface)
+      expect(shows(strings, '2h ago'), `2h ago on the ${surface}`).toBe(true)
+      expect(strings.some(t => /\dm ago|\ds ago/.test(t)), `no minutes or seconds on the ${surface}`).toBe(false)
+    }
+  })
+
+  // ----- 4. a finished subagent
+
+  test('a finished subagent keeps its call count and last tool but shows no ago', async ($, on) => {
+    const w = await stage($, on)
+    await spawnSubagent($, 'coding-worker')
+    await w.step(WORKER, [read('/w/a.rb'), read('/w/b.rb')])
+    await w.step(WORKER, [{ name: 'Edit', input: { file_path: '/w/last.rb' } }])
+    await w.h.clock.advance(30_000)
+    expect((await w.panel('terminal')).some(t => AGO.test(t)), 'still running: shows ago').toBe(true)
+
+    await w.finish(WORKER, 'coding-worker')
+    for (const surface of SURFACES) {
+      const strings = await w.panel(surface)
+      expect(showsCalls(strings, 3), `3 calls on the ${surface}`).toBe(true)
+      expect(shows(strings, 'Edit last.rb'), `Edit last.rb on the ${surface}`).toBe(true)
+      expect(strings.some(t => AGO.test(t)), `no ago on the ${surface}`).toBe(false)
+    }
+  })
+
+  // ----- 5. the orchestrator's own steps
+
+  test('steps of the orchestrator itself do not change any subagent row', async ($, on) => {
+    const w = await stage($, on)
+    await spawnSubagent($, 'coding-worker')
+    await w.step(WORKER, [read('/w/a.rb')])
+    await w.h.clock.advance(5_000)
+    await w.step(undefined, [{ name: 'Bash', input: { command: 'ls' } }, { name: 'Edit', input: { file_path: '/w/orchestrator.rb' } }])
+    for (const surface of SURFACES) {
+      const strings = await w.panel(surface)
+      expect(showsCalls(strings, 1), `still 1 call on the ${surface}`).toBe(true)
+      expect(shows(strings, 'Read a.rb'), `still Read a.rb on the ${surface}`).toBe(true)
+      expect(hides(strings, 'orchestrator.rb'), `no orchestrator tool on the ${surface}`).toBe(true)
+      expect(shows(strings, '5s ago'), `the subagent's own last step is still 5s ago on the ${surface}`).toBe(true)
+    }
+  })
+
+  // ----- 6. markup characters in a file name
+
+  test('a file name containing markup characters is shown as text, not markup', async ($, on) => {
+    const w = await stage($, on)
+    await spawnSubagent($, 'coding-worker')
+    await w.step(WORKER, [{ name: 'Edit', input: { file_path: '/w/a<b>.rb' } }])
+
+    // The terminal shows the name itself.
+    expect(shows(await w.panel('terminal'), 'Edit a<b>.rb'), 'the file name as text on the terminal').toBe(true)
+
+    // The desktop still draws (a refused drawing rejects the mount), says the name as text, and holds no element named b.
+    const desktop = await w.panel('desktop')
+    expect(shows(desktop, 'Edit a<b>.rb'), 'the file name as text on the desktop').toBe(true)
+    for (const surface of SURFACES) {
+      const pane = await $.ui.mount({
+        plugin: 'autobots-progress',
+        surface,
+        component: 'Pane',
+        requestId: w.h.openedPanes[0],
+        props: { title: 'Agents', isFocused: false, bodyColumns: 100, placement: 'inline', scroll: { offset: 0, bodyRows: 30 }, view: {} },
+      })
+      const elements = await pane.findAll({})
+      await pane.unmount()
+      expect(elements.filter(el => el.type.toLowerCase() === 'b'), `no b element on the ${surface}`).toEqual([])
+    }
+  })
+
+  // ----- 7. non-roster subagents
+
+  test('a non-roster subagent such as Explore gets the same activity display', async ($, on) => {
+    const w = await stage($, on)
+    await $.command.run({ command: 'agents-info', args: '' } as never)
+    await spawnSubagent($, 'Explore', 'scan the repository')
+    await w.step('agent-Explore', [read('/w/a.rb')])
+    await w.step('agent-Explore', [{ name: 'Grep', input: { pattern: 'needle' } }])
+    await w.h.clock.advance(7_000)
+    for (const surface of SURFACES) {
+      const strings = await w.panel(surface)
+      expect(showsCalls(strings, 2), `2 calls on the ${surface}`).toBe(true)
+      expect(shows(strings, 'Grep needle'), `Grep needle on the ${surface}`).toBe(true)
+      expect(shows(strings, '7s ago'), `7s ago on the ${surface}`).toBe(true)
+    }
   })
 })

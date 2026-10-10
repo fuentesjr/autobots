@@ -61,6 +61,9 @@ const STRINGS = {
     tasks: 'Tasks',
     review: 'Review',
     busy: 'running',
+    calls: (n: number) => `${n} ${n === 1 ? 'call' : 'calls'}`,
+    ago: 'ago',
+    units: ['s', 'm', 'h'],
   },
   ru: {
     pane: 'Агенты',
@@ -89,6 +92,14 @@ const STRINGS = {
     tasks: 'Задачи',
     review: 'Ревью',
     busy: 'в работе',
+    calls: (n: number) => {
+      const d = n % 10
+      const dd = n % 100
+      const word = d === 1 && dd !== 11 ? 'вызов' : d >= 2 && d <= 4 && (dd < 12 || dd > 14) ? 'вызова' : 'вызовов'
+      return `${n} ${word}`
+    },
+    ago: 'назад',
+    units: ['с', 'м', 'ч'],
   },
 } as const
 
@@ -179,7 +190,11 @@ const FONT = "-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',sans-ser
 const xml = (s: string): string =>
   s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c)
 
-const clip = (s: string, max: number): string => (s.length > max ? s.slice(0, Math.max(1, max - 1)) + '…' : s)
+// Counts code points, so a cut never splits a surrogate pair.
+const clip = (s: string, max: number): string => {
+  const chars = [...s]
+  return chars.length > max ? chars.slice(0, Math.max(1, max - 1)).join('') + '…' : s
+}
 
 // Rough advance of system UI text, in em; good enough to size the title's slot.
 const charEm = (ch: string): number =>
@@ -397,6 +412,56 @@ const fmtTime = (ms: number): string => {
 
 const elapsed = (a: AgentRun, at: number): number => (a.endedAt ?? Math.max(at, a.startedAt)) - a.startedAt
 
+// Leading shell assignments: `NAME=value`, the value bare, "double-quoted" or 'single-quoted'.
+const ASSIGNMENTS = /^(?:[A-Za-z_][A-Za-z0-9_]*=(?:"(?:[^"\\]|\\.)*"|'[^']*'|[^\s"']*)(?:\s+|$))*/
+
+// A tool call as the panel may show it: the tool's name and at most a short,
+// non-sensitive target. Never a full command, URL, query or path.
+const summarizeTool = (name: string, input: unknown): string => {
+  const field = (key: string): string => {
+    const v = input && typeof input === 'object' ? (input as Record<string, unknown>)[key] : undefined
+    return typeof v === 'string' ? v : ''
+  }
+  let target = ''
+  if (['Read', 'Edit', 'Write', 'NotebookEdit'].includes(name)) target = field('file_path').split(/[\\/]/).pop() ?? ''
+  else if (name === 'Grep' || name === 'Glob') target = clip(field('pattern'), 24)
+  else if (name === 'Bash') {
+    // The command's file name only: past any `NAME=value` prefixes (values bare or quoted,
+    // spaces and all), unquoted, without directories. An assignment the pattern cannot close,
+    // such as an unterminated quote, leaves just `Bash`: never part of its value.
+    const rest = field('command').trimStart().replace(ASSIGNMENTS, '')
+    const word = /^[A-Za-z_][A-Za-z0-9_]*=/.test(rest) ? '' : (rest.split(/\s/)[0] ?? '')
+    target = clip(word.replace(/^['"]+|['"]+$/g, '').split(/[\\/]/).pop() ?? '', 24)
+  }
+  else if (name === 'WebFetch') {
+    try {
+      target = new URL(field('url')).host
+    } catch {
+      // Not a URL: the tool name alone.
+    }
+  }
+  // Control characters would drive the terminal, and bidi or zero-width ones would disguise
+  // the text; none of them print. The cap bounds what reaches state and the alt text.
+  return clip(`${name} ${target}`.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, '').trim(), 40)
+}
+
+const fmtAge = (ms: number): string => {
+  const [sec, min, hr] = tr().units
+  const s = Math.max(0, Math.floor(ms / 1000))
+  if (s < 60) return `${s}${sec}`
+  const m = Math.floor(s / 60)
+  return m < 60 ? `${m}${min}` : `${Math.floor(m / 60)}${hr}`
+}
+
+// What the agent is doing, observed from its steps: nothing before its first tool call;
+// how long ago its last step was, only while it runs.
+const activityOf = (a: AgentRun, at: number): string => {
+  if (!a.toolCalls) return ''
+  const parts = [tr().calls(a.toolCalls), a.lastTool ?? '']
+  if (a.status === 'running' && a.lastStepAt !== undefined) parts.push(`${fmtAge(at - a.lastStepAt)} ${tr().ago}`)
+  return parts.filter(Boolean).join(' · ')
+}
+
 type Planned = PlannedTask & { n: number }
 
 const plannedOf = (f: Flow | null, list: AgentRun[]): Planned[] => {
@@ -592,6 +657,8 @@ const agentSvg = (W: number, a: AgentRun, at: number): string => {
   const barW = textW
   const progress = progressOf(a)
   const stats = `ctx ${ctx}% · ${fmtTokens(a.contextTokens)}  ≈${fmtCost(a.costUsd)}  ${fmtTime(elapsed(a, at))}`
+  const activity = activityOf(a, at)
+  const activityW = Math.max(0, barW - textWidth(stats, 11) - 12)
   // A running agent's bar is its context fill, drawn grey.
   const fillW = Math.round(barW * (progress ?? ctx / 100))
   return svg(
@@ -600,6 +667,7 @@ const agentSvg = (W: number, a: AgentRun, at: number): string => {
     `${crab(0, 14, costumeOf(a.type), false, a.status === 'running')}
 <text class="t" x="42" y="18" font-family="${FONT}" font-size="13" font-weight="600">${xml(fitText(a.description || a.type, 13, textW))}</text>
 <text x="42" y="34" font-family="${FONT}" font-size="11"><tspan fill="${color}">${xml(role === 'other' ? a.type : role)}</tspan><tspan class="s">  ${xml(meta.join('  ·  '))}</tspan></text>
+${activity && activityW > 30 ? `<text class="t" x="42" y="49" font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${xml(fitText(activity, 11, activityW))}</text>` : ''}
 <text class="s" x="${42 + barW}" y="49" text-anchor="end" font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${stats}</text>
 <rect class="k" x="42" y="55" width="${barW}" height="4" rx="2"/><rect${progress === null ? ' class="m"' : ''} x="42" y="55" width="${fillW}" height="4" rx="2"${progress === null ? '' : ` fill="${color}"`}/>
 ${statusMark(W - 8, 16, a.status, color)}
@@ -780,6 +848,7 @@ export const register: Register = (on, options) => {
         costUsd: 0,
         steps: 0,
         round,
+        toolCalls: 0,
       }
       return [...list.filter(a => a.id !== run.id), run].slice(-200)
     })
@@ -791,7 +860,7 @@ export const register: Register = (on, options) => {
     return started
   })
 
-  // Each model request of a subagent: live context, tokens and cost.
+  // Each model request of a subagent: live context, tokens and cost, and its tool calls.
   on('turn.step', async function* ($, e, next) {
     const result = yield* next(e)
     const agentId = e.agentId
@@ -799,6 +868,9 @@ export const register: Register = (on, options) => {
     if (!agentId || !usage) return result
 
     const model = usage.model || e.model
+    const uses = result.toolUses
+    const last = uses[uses.length - 1]
+    const at = await $.clock.now()
     await update($, agents, list =>
       list.map(a =>
         a.agentId !== agentId
@@ -823,6 +895,9 @@ export const register: Register = (on, options) => {
                 (usage.cache_creation_input_tokens || 0),
               costUsd: a.costUsd + costOf(model, usage),
               steps: a.steps + 1,
+              toolCalls: (a.toolCalls ?? 0) + uses.length,
+              lastTool: last ? summarizeTool(last.name, last.input) : a.lastTool,
+              lastStepAt: at,
             },
       ),
     )
@@ -899,6 +974,10 @@ export const register: Register = (on, options) => {
     if (e.surface === 'desktop' && 'Svg' in ui) {
       const { Svg } = ui
       const W = Math.max(240, Math.min(900, (e.props.bodyColumns || 40) * 8 - 8))
+      const withActivity = (text: string, a: AgentRun, at: number): string => {
+        const activity = activityOf(a, at)
+        return activity ? `${text}, ${activity}` : text
+      }
       const section = (key: string, text: string) => (
         <Text key={key} dimColor>
           {text}
@@ -920,12 +999,12 @@ export const register: Register = (on, options) => {
           {isEmpty && <Text dimColor>{s.empty}</Text>}
           {running.length > 0 && section('h-run', `${s.running} · ${running.length}`)}
           {running.map(a => (
-            <Svg key={a.id} source={agentSvg(W, a, at)} alt={`${a.description}: ${modelName(a.model)}, ${s.isRunning}`} width={W} height={66} />
+            <Svg key={a.id} source={agentSvg(W, a, at)} alt={withActivity(`${a.description}: ${modelName(a.model)}, ${s.isRunning}`, a, at)} width={W} height={66} />
           ))}
           {finished.length > 0 && toggleDone}
           {!p.isDoneCollapsed &&
             finished.map(a => (
-              <Svg key={a.id} source={agentSvg(W, a, at)} alt={`${a.description}: ${modelName(a.model)}, ${s.isFinished}`} width={W} height={66} />
+              <Svg key={a.id} source={agentSvg(W, a, at)} alt={withActivity(`${a.description}: ${modelName(a.model)}, ${s.isFinished}`, a, at)} width={W} height={66} />
             ))}
           {planned.length > 0 && section('h-plan', `${s.planned} · ${planned.length}`)}
           {planned.map(pl => (
@@ -944,6 +1023,7 @@ export const register: Register = (on, options) => {
       const ctx = ctxOf(a)
       const progress = progressOf(a)
       const model = a.effort ? `${modelName(a.model)} · ${a.effort}` : modelName(a.model)
+      const activity = activityOf(a, at)
       return (
         <Box key={a.id} flexDirection="column" marginBottom={1}>
           <Box flexDirection="row" gap={1}>
@@ -964,6 +1044,7 @@ export const register: Register = (on, options) => {
             <Text dimColor>
               {' '}
               ctx {ctx}% · {fmtTokens(a.contextTokens)} ≈{fmtCost(a.costUsd)} {fmtTime(elapsed(a, at))}
+              {activity ? ` · ${activity}` : ''}
             </Text>
           </Text>
         </Box>

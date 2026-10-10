@@ -34,6 +34,11 @@ export type AgentRun = {
   costUsd: number
   steps: number
   round: number
+  // Activity observed from the agent's own model steps. `lastTool` is display
+  // text, already summarized: never the tool's raw input.
+  toolCalls: number
+  lastTool?: string
+  lastStepAt?: number
 }
 
 export type Panel = {
