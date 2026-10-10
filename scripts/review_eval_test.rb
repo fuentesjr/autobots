@@ -97,6 +97,13 @@ class ReviewEvalTest < Minitest::Test
     assert_equal false, g["format_ok"]
   end
 
+  def test_harness_paths
+    assert_equal ["scripts/review_eval.rb", "scripts/role_eval.rb", "evals/roles/reviewer/items.json",
+                  "evals/roles/reviewer/diffs", "evals/roles/reviewer/witnesses",
+                  "evals/roles/coding-worker/cases.json", "evals/roles/coding-worker/prompts"],
+                 ReviewEval::HARNESS_PATHS
+  end
+
   def test_prompt_embeds_the_task_and_asks_for_the_findings_block
     p = ReviewEval.prompt("Fix the bug.")
     assert_includes p, "<task>\nFix the bug.\n</task>"

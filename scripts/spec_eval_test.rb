@@ -6,6 +6,13 @@ require_relative "spec_eval"
 class SpecEvalTest < Minitest::Test
   def row(id, pass) = { "case" => id, "grade" => { "pass" => pass } }
 
+  def test_harness_paths
+    assert_equal ["scripts/spec_eval.rb", "scripts/role_eval.rb", "evals/roles/spec-test-writer/cases.json",
+                  "evals/roles/spec-test-writer/briefs", "evals/roles/spec-test-writer/references",
+                  "evals/roles/spec-test-writer/mutants", "evals/roles/spec-test-writer/witnesses"],
+                 SpecEval::HARNESS_PATHS
+  end
+
   def test_in_scope_matches_path_prefixes_only
     assert SpecEval.in_scope?("test/ctxpack/x_test.rb", ["test/"])
     refute SpecEval.in_scope?("lib/test/x.rb", ["test/"])

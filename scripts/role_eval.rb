@@ -94,13 +94,15 @@ module RoleEval
     STRIP_VARS.to_h { |v| [v, nil] }
   end
 
-  def harness_sha
+  # Digest of each harness path's files, relative path then bytes; a directory
+  # contributes every file under it, dotfiles included, in sorted order.
+  def harness_sha(paths = HARNESS_PATHS, root: REPO)
     h = Digest::SHA256.new
-    HARNESS_PATHS.each do |rel|
-      p = File.join(REPO, rel)
+    paths.each do |rel|
+      p = File.join(root, rel)
       files = File.directory?(p) ? Dir.glob("**/*", File::FNM_DOTMATCH, base: p).map { |f| File.join(p, f) }.select { |f| File.file?(f) }.sort : [p]
       files.each do |f|
-        h << f.delete_prefix("#{REPO}/")
+        h << f.delete_prefix("#{root}/")
         h << File.binread(f)
       end
     end
@@ -112,17 +114,18 @@ module RoleEval
     File.exist?(p) ? JSON.parse(File.read(p)) : {}
   end
 
-  def gate_harness(approve, flow)
+  # Approve records the harness digest (plus extra keys) in the flow's
+  # _state.json; otherwise a digest that differs from the recorded one exits 2.
+  def gate_harness(approve, flow, paths: HARNESS_PATHS, root: REPO, extra: {})
     state = load_state(flow)
-    sha = harness_sha
+    sha = harness_sha(paths, root: root)
     if approve
-      state.merge!("metrics" => METRICS, "perf_fields" => PERF_FIELDS,
-                   "harness_paths" => HARNESS_PATHS, "harness_sha" => sha)
+      state.merge!(extra, "harness_paths" => paths, "harness_sha" => sha)
       FileUtils.mkdir_p(flow)
       File.write(File.join(flow, "_state.json"), "#{JSON.pretty_generate(state)}\n")
       puts "harness approved: #{sha[0, 12]}"
     elsif state["harness_sha"] != sha
-      die("harness changed since last approval (runner, cases, prompts or hidden tests); " \
+      die("harness changed since last approval (see harness_paths in _state.json); " \
           "the owner must re-run with --approve-harness", 2)
     end
   end
@@ -213,7 +216,40 @@ module RoleEval
     t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     r = sh(cmd, ws, timeout_s, env)
     wall = Process.clock_gettime(Process::CLOCK_MONOTONIC) - t0
-    { timeout: r.timed_out?, wall_s: wall, events: parse_events(r.out), returncode: r.code, stderr: r.err[-2000..] || r.err }
+    events = parse_events(r.out)
+    result = events.reverse.find { |e| e["type"] == "result" }
+    usage_models = result && result["modelUsage"] || {}
+    { timeout: r.timed_out?, wall_s: wall, events: events, returncode: r.code, stderr: r.err[-2000..] || r.err,
+      result: result, init: events.find { |e| e["type"] == "system" && e["subtype"] == "init" } || {},
+      usage_models: usage_models, model: usage_models.max_by { |_, u| u.fetch("outputTokens", 0) }&.first }
+  end
+
+  # Why a finished run can't be graded, or nil if it can. Returns the error
+  # row's fields, whether to stop the whole run (billing or quota), and whether
+  # the attempt is worth retrying. error_max_turns is gradable; the caller
+  # records it as truncated.
+  def fault(run, requested_model)
+    result = run[:result]
+    usage = run[:usage_models]
+    return { row: { "class" => "timeout" }, stop: false, retry: false } if run[:timeout]
+    return { row: { "class" => "harness", "stderr" => run[:stderr] }, stop: false, retry: true } if result.nil?
+
+    key = run[:init]["apiKeySource"]
+    return { row: { "class" => "billing", "apiKeySource" => key }, stop: true, retry: false } unless [nil, "none"].include?(key)
+
+    text = result["result"].to_s
+    if result["is_error"] && QUOTA_RE.match?(text)
+      return { row: { "class" => "quota", "result" => text[0, 300], "modelUsage" => usage }, stop: true, retry: false }
+    end
+    if run[:model] != requested_model
+      return { row: { "class" => "served_model_mismatch", "requested" => requested_model, "modelUsage" => usage },
+               stop: false, retry: false }
+    end
+    if result["is_error"] && result["subtype"] != "error_max_turns"
+      return { row: { "class" => "harness", "subtype" => result["subtype"], "result" => text[0, 300], "modelUsage" => usage },
+               stop: false, retry: true }
+    end
+    nil
   end
 
   def parse_events(out)
@@ -388,42 +424,16 @@ module RoleEval
         ws, base = make_workspace(c)
         pin_role(ws, opts[:role], opts[:model], opts[:effort])
         run = run_agent(ws, opts[:role], prompt, opts[:effort], env, opts[:timeout_s], opts[:max_turns])
-        result = run[:events].reverse.find { |e| e["type"] == "result" }
-        init = run[:events].find { |e| e["type"] == "system" && e["subtype"] == "init" } || {}
         err_base = { "prompt_id" => c["id"], "rep" => rep, "attempt" => try_no, "wall_s" => run[:wall_s].round(1) }
-        if run[:timeout]
-          append(errors, err_base.merge("class" => "timeout"))
-          return # ceiling fired: no retry
-        end
-        if result.nil?
-          append(errors, err_base.merge("class" => "harness", "stderr" => run[:stderr]))
+        if (f = fault(run, opts[:model]))
+          budget.stop! if f[:stop]
+          append(errors, err_base.merge(f[:row]))
+          return unless f[:retry]
+
           backoff(try_no)
           next
         end
-        usage_models = result["modelUsage"] || {}
-        unless [nil, "none"].include?(init["apiKeySource"])
-          budget.stop!
-          append(errors, err_base.merge("class" => "billing", "apiKeySource" => init["apiKeySource"]))
-          return
-        end
-        if result["is_error"] && QUOTA_RE.match?(result["result"].to_s)
-          budget.stop!
-          append(errors, err_base.merge("class" => "quota", "result" => result["result"].to_s[0, 300],
-                                        "modelUsage" => usage_models))
-          return
-        end
-        main = usage_models.max_by { |_, u| u.fetch("outputTokens", 0) }&.first
-        if main != opts[:model]
-          append(errors, err_base.merge("class" => "served_model_mismatch",
-                                        "requested" => opts[:model], "modelUsage" => usage_models))
-          return
-        end
-        if result["is_error"] && result["subtype"] != "error_max_turns"
-          append(errors, err_base.merge("class" => "harness", "subtype" => result["subtype"],
-                                        "result" => result["result"].to_s[0, 300], "modelUsage" => usage_models))
-          backoff(try_no)
-          next
-        end
+        result = run[:result]
         trace, tool_calls = to_trace(run[:events])
         trace.insert(1, { "role" => "user", "content" => prompt })
         scores, detail = grade(c, ws, base, env)
@@ -439,7 +449,7 @@ module RoleEval
           "prompt_id" => c["id"], "rep" => rep, "prompt" => prompt, "tags" => c["tags"],
           "status" => status, "stop_reason" => result["subtype"],
           "grade" => status == "ok" ? scores : {},
-          "model" => main, "models" => usage_models.keys.sort, "effort" => opts[:effort],
+          "model" => run[:model], "models" => run[:usage_models].keys.sort, "effort" => opts[:effort],
           "attempt" => try_no, "base_sha" => base,
           "latency_s" => ((result["duration_ms"] || 0) / 1000.0).round(1),
           "turns" => result["num_turns"], "tool_calls" => tool_calls, "verified" => verified(trace),
@@ -467,7 +477,7 @@ module RoleEval
   def cmd_run(opts)
     env = check_env
     flow = flow_dir(opts[:role])
-    gate_harness(opts[:approve_harness], flow)
+    gate_harness(opts[:approve_harness], flow, extra: { "metrics" => METRICS, "perf_fields" => PERF_FIELDS })
     die("variant must be 'baseline' or 'v<N>'") unless opts[:variant].match?(/\A(baseline|v\d+)\z/)
     vdir = File.join(flow, opts[:variant])
     done = done_keys(vdir)

@@ -171,6 +171,82 @@ class RoleEvalTest < Minitest::Test
     assert_equal File.join(RoleEval::REPO, "evals", "roles", "coding-worker"), RoleEval::EVAL_DIR
   end
 
+  def harness_tree(root)
+    File.write(File.join(root, "one.txt"), "1\n")
+    FileUtils.mkdir_p(File.join(root, "d", "sub"))
+    File.write(File.join(root, "d", ".hidden"), "h\n")
+    File.write(File.join(root, "d", "sub", "n.txt"), "n\n")
+  end
+
+  def test_harness_sha_digests_sorted_relpaths_and_bytes_including_dotfiles
+    Dir.mktmpdir do |root|
+      harness_tree(root)
+      expected = Digest::SHA256.hexdigest("one.txt" "1\n" "d/.hidden" "h\n" "d/sub/n.txt" "n\n")
+      assert_equal expected, RoleEval.harness_sha(["one.txt", "d"], root: root)
+    end
+  end
+
+  def test_gate_harness_approves_passes_and_refuses_a_tampered_harness
+    Dir.mktmpdir do |root|
+      harness_tree(root)
+      flow = File.join(root, "runs")
+      FileUtils.mkdir_p(flow)
+      File.write(File.join(flow, "_state.json"), JSON.generate("unrelated" => "keep"))
+      paths = ["one.txt", "d"]
+      capture_io { RoleEval.gate_harness(true, flow, paths: paths, root: root) }
+      state = JSON.parse(File.read(File.join(flow, "_state.json")))
+      assert_equal "keep", state["unrelated"]
+      assert_equal paths, state["harness_paths"]
+      assert_equal RoleEval.harness_sha(paths, root: root), state["harness_sha"]
+
+      RoleEval.gate_harness(false, flow, paths: paths, root: root) # unchanged harness: no exit
+
+      File.write(File.join(root, "d", "sub", "n.txt"), "tampered\n")
+      err = assert_raises(SystemExit) { capture_io { RoleEval.gate_harness(false, flow, paths: paths, root: root) } }
+      assert_equal 2, err.status
+    end
+  end
+
+  # A run_agent return hash for fault: result/init as the stream would carry them.
+  def fault_run(result: nil, init: {}, timeout: false, stderr: "boom")
+    usage = result && (result["modelUsage"] || {}) || {}
+    { timeout: timeout, stderr: stderr, result: result, init: init, usage_models: usage,
+      model: usage.max_by { |_, u| u.fetch("outputTokens", 0) }&.first }
+  end
+
+  def test_fault_classifies_every_ungradable_run
+    m = "claude-opus-5-5"
+    usage = { m => { "outputTokens" => 90 }, "claude-haiku-5-5" => { "outputTokens" => 10 } }
+    ok = { "is_error" => false, "subtype" => "success", "result" => "done", "modelUsage" => usage }
+    cases = {
+      "timeout" => [fault_run(timeout: true, result: ok),
+                    { row: { "class" => "timeout" }, stop: false, retry: false }],
+      "no result" => [fault_run,
+                      { row: { "class" => "harness", "stderr" => "boom" }, stop: false, retry: true }],
+      "api key" => [fault_run(result: ok, init: { "apiKeySource" => "ANTHROPIC_API_KEY" }),
+                    { row: { "class" => "billing", "apiKeySource" => "ANTHROPIC_API_KEY" }, stop: true, retry: false }],
+      "quota" => [fault_run(result: ok.merge("is_error" => true, "result" => "You've hit your session limit" + "x" * 400)),
+                  { row: { "class" => "quota", "result" => ("You've hit your session limit" + "x" * 400)[0, 300],
+                           "modelUsage" => usage }, stop: true, retry: false }],
+      "served model" => [fault_run(result: ok.merge("modelUsage" => { "claude-haiku-5-5" => { "outputTokens" => 5 } })),
+                         { row: { "class" => "served_model_mismatch", "requested" => m,
+                                  "modelUsage" => { "claude-haiku-5-5" => { "outputTokens" => 5 } } },
+                           stop: false, retry: false }],
+      "no usage" => [fault_run(result: ok.except("modelUsage")),
+                     { row: { "class" => "served_model_mismatch", "requested" => m, "modelUsage" => {} },
+                       stop: false, retry: false }],
+      "is_error" => [fault_run(result: ok.merge("is_error" => true, "subtype" => "error_during_execution", "result" => "x")),
+                     { row: { "class" => "harness", "subtype" => "error_during_execution", "result" => "x",
+                              "modelUsage" => usage }, stop: false, retry: true }]
+    }
+    cases.each { |name, (run, want)| assert_equal want, RoleEval.fault(run, m), name }
+
+    assert_nil RoleEval.fault(fault_run(result: ok), m)
+    assert_nil RoleEval.fault(fault_run(result: ok, init: { "apiKeySource" => "none" }), m)
+    # Max turns is gradable (the caller marks it truncated), even when flagged is_error.
+    assert_nil RoleEval.fault(fault_run(result: ok.merge("is_error" => true, "subtype" => "error_max_turns")), m)
+  end
+
   def test_sh_unsets_stripped_env_vars
     Dir.mktmpdir do |dir|
       ENV["CLAUDE_CODE_EFFORT_LEVEL"] = "high"

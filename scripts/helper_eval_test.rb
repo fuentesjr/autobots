@@ -81,6 +81,11 @@ class HelperEvalTest < Minitest::Test
     end
   end
 
+  def test_harness_paths
+    assert_equal ["scripts/helper_eval.rb", "scripts/role_eval.rb", "evals/roles/helper-worker/cases.json"],
+                 HelperEval::HARNESS_PATHS
+  end
+
   def test_by_case_counts_passes_per_case
     rows = [["a", 1], ["a", 0], ["a", 1], ["b", 0]].map { |id, p| { "case" => id, "grade" => { "pass" => p } } }
     assert_equal({ "a" => [2, 3], "b" => [0, 1] }, HelperEval.by_case(rows))

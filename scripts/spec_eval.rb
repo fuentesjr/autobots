@@ -47,33 +47,6 @@ module SpecEval
 
   # ---------- setup ----------
 
-  def harness_sha
-    h = Digest::SHA256.new
-    HARNESS_PATHS.each do |rel|
-      p = File.join(RoleEval::REPO, rel)
-      files = File.directory?(p) ? Dir.glob("**/*", File::FNM_DOTMATCH, base: p).map { |f| File.join(p, f) }.select { |f| File.file?(f) }.sort : [p]
-      files.each do |f|
-        h << f.delete_prefix("#{RoleEval::REPO}/")
-        h << File.binread(f)
-      end
-    end
-    h.hexdigest
-  end
-
-  def gate_harness(approve)
-    path = File.join(FLOW, "_state.json")
-    state = File.exist?(path) ? JSON.parse(File.read(path)) : {}
-    sha = harness_sha
-    if approve
-      FileUtils.mkdir_p(FLOW)
-      File.write(path, "#{JSON.pretty_generate(state.merge('harness_paths' => HARNESS_PATHS, 'harness_sha' => sha))}\n")
-      puts "harness approved: #{sha[0, 12]}"
-    elsif state["harness_sha"] != sha
-      RoleEval.die("harness changed since last approval (runner, cases, briefs, references, mutants or witnesses); " \
-                   "the owner must re-run with --approve-harness", 2)
-    end
-  end
-
   def load_cases(only)
     cases = JSON.parse(File.read(File.join(DIR, "cases.json")))["cases"]
     return cases unless only
@@ -164,41 +137,16 @@ module SpecEval
         ws, base = RoleEval.make_workspace(c)
         RoleEval.pin_role(ws, ROLE, opts[:model], opts[:effort])
         run = RoleEval.run_agent(ws, ROLE, prompt, opts[:effort], env, opts[:timeout_s], opts[:max_turns])
-        result = run[:events].reverse.find { |e| e["type"] == "result" }
-        init = run[:events].find { |e| e["type"] == "system" && e["subtype"] == "init" } || {}
         err_base = { "case" => c["id"], "rep" => rep, "attempt" => try_no, "wall_s" => run[:wall_s].round(1) }
-        if run[:timeout]
-          RoleEval.append(errors, err_base.merge("class" => "timeout"))
-          return
-        end
-        if result.nil?
-          RoleEval.append(errors, err_base.merge("class" => "harness", "stderr" => run[:stderr]))
+        if (f = RoleEval.fault(run, opts[:model]))
+          budget.stop! if f[:stop]
+          RoleEval.append(errors, err_base.merge(f[:row]))
+          return unless f[:retry]
+
           RoleEval.backoff(try_no)
           next
         end
-        usage_models = result["modelUsage"] || {}
-        unless [nil, "none"].include?(init["apiKeySource"])
-          budget.stop!
-          RoleEval.append(errors, err_base.merge("class" => "billing", "apiKeySource" => init["apiKeySource"]))
-          return
-        end
-        if result["is_error"] && RoleEval::QUOTA_RE.match?(result["result"].to_s)
-          budget.stop!
-          RoleEval.append(errors, err_base.merge("class" => "quota", "result" => result["result"].to_s[0, 300]))
-          return
-        end
-        main = usage_models.max_by { |_, u| u.fetch("outputTokens", 0) }&.first
-        if main != opts[:model]
-          RoleEval.append(errors, err_base.merge("class" => "served_model_mismatch",
-                                                 "requested" => opts[:model], "modelUsage" => usage_models))
-          return
-        end
-        if result["is_error"] && result["subtype"] != "error_max_turns"
-          RoleEval.append(errors, err_base.merge("class" => "harness", "subtype" => result["subtype"],
-                                                 "result" => result["result"].to_s[0, 300]))
-          RoleEval.backoff(try_no)
-          next
-        end
+        result = run[:result]
         status = result["subtype"] == "error_max_turns" ? "truncated" : "ok"
         g, detail = grade(c, ws, base, env)
         # Truncated runs count as fail (pre-registered).
@@ -215,7 +163,7 @@ module SpecEval
           "case" => c["id"], "rep" => rep, "status" => status, "stop_reason" => result["subtype"], "grade" => g,
           "changed_paths" => detail["changed_paths"], "out_of_scope" => detail["out_of_scope"],
           "references_failed" => detail["references_failed"].keys, "mutants_survived" => detail["mutants_survived"],
-          "model" => main, "models" => usage_models.keys.sort, "effort" => opts[:effort], "attempt" => try_no,
+          "model" => run[:model], "models" => run[:usage_models].keys.sort, "effort" => opts[:effort], "attempt" => try_no,
           "base_sha" => base, "latency_s" => ((result["duration_ms"] || 0) / 1000.0).round(1),
           "wall_s" => run[:wall_s].round(1), "turns" => result["num_turns"], "tool_calls" => tool_calls,
           "api_equiv_usd" => result["total_cost_usd"],
@@ -238,7 +186,7 @@ module SpecEval
 
   def cmd_run(opts)
     env = RoleEval.check_env
-    gate_harness(opts[:approve_harness])
+    RoleEval.gate_harness(opts[:approve_harness], FLOW, paths: HARNESS_PATHS)
     RoleEval.die("variant must be 'baseline', 'smoke' or 'v<N>'") unless opts[:variant].match?(/\A(baseline|smoke|v\d+)\z/)
     vdir = File.join(FLOW, opts[:variant])
     done = done_keys(vdir)
