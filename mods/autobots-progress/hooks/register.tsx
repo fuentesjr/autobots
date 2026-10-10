@@ -935,7 +935,8 @@ export const register: Register = (on, options) => {
     if (!agentId || !usage) return result
 
     const model = usage.model || e.model
-    const uses = result.toolUses
+    // SubagentHandback is the subagent handing its report back, not work: never shown or counted.
+    const uses = result.toolUses.filter(u => u.name !== 'SubagentHandback')
     const last = uses[uses.length - 1]
     const at = await $.clock.now()
     await update($, agents, list =>

@@ -952,6 +952,95 @@ describe('agent activity in the agents panel', () => {
     }
   })
 
+  // ----- 6b. the SubagentHandback tool is not activity
+  // A subagent ends by calling SubagentHandback to hand its report back; that is not work the panel
+  // should show. Seen live: every finished row read "2 calls · SubagentHandback" (owner-approved 2026-10-10).
+
+  const handback: ToolUse = { name: 'SubagentHandback', input: { message: 'the hidden report' } }
+
+  test('a SubagentHandback call in the same step as an earlier tool does not replace that tool as the row\'s most recent', async ($, on) => {
+    const w = await stage($, on)
+    await spawnSubagent($, 'coding-worker')
+    await w.step(WORKER, [read('/w/a.rb'), handback])
+    for (const surface of SURFACES) {
+      const strings = await w.panel(surface)
+      expect(shows(strings, 'Read a.rb'), `Read a.rb on the ${surface}`).toBe(true)
+      expect(hides(strings, 'SubagentHandback'), `no SubagentHandback on the ${surface}`).toBe(true)
+    }
+  })
+
+  test('a SubagentHandback call in a later step does not replace the last other tool as the row\'s most recent', async ($, on) => {
+    const w = await stage($, on)
+    await spawnSubagent($, 'coding-worker')
+    await w.step(WORKER, [read('/w/a.rb')])
+    await w.step(WORKER, [handback])
+    for (const surface of SURFACES) {
+      const strings = await w.panel(surface)
+      expect(shows(strings, 'Read a.rb'), `Read a.rb on the ${surface}`).toBe(true)
+      expect(hides(strings, 'SubagentHandback'), `no SubagentHandback on the ${surface}`).toBe(true)
+    }
+  })
+
+  test('a SubagentHandback call is not counted in the row\'s calls: one Read plus one SubagentHandback shows 1 call', async ($, on) => {
+    const w = await stage($, on)
+    await spawnSubagent($, 'coding-worker')
+    await w.step(WORKER, [read('/w/a.rb')])
+    await w.step(WORKER, [handback])
+    for (const surface of SURFACES) {
+      const strings = await w.panel(surface)
+      expect(showsCalls(strings, 1), `1 call on the ${surface}`).toBe(true)
+      expect(strings.some(t => /(^|\D)2 calls/.test(t)), `not 2 calls on the ${surface}`).toBe(false)
+    }
+  })
+
+  test('a SubagentHandback call listed before another tool in a step is not counted and the other tool is the most recent', async ($, on) => {
+    const w = await stage($, on)
+    await spawnSubagent($, 'coding-worker')
+    await w.step(WORKER, [handback, { name: 'Grep', input: { pattern: 'needle' } }])
+    for (const surface of SURFACES) {
+      const strings = await w.panel(surface)
+      expect(showsCalls(strings, 1), `1 call on the ${surface}`).toBe(true)
+      expect(strings.some(t => /(^|\D)2 calls/.test(t)), `not 2 calls on the ${surface}`).toBe(false)
+      expect(shows(strings, 'Grep needle'), `Grep needle on the ${surface}`).toBe(true)
+    }
+  })
+
+  test('a subagent whose only tool use is SubagentHandback shows no call count and no tool, like one with no tool calls', async ($, on) => {
+    const w = await stage($, on)
+    await spawnSubagent($, 'coding-worker')
+    await w.step(WORKER, [handback])
+    for (const surface of SURFACES) {
+      const strings = await w.panel(surface)
+      expect(hides(strings, 'call'), `no call count on the ${surface}`).toBe(true)
+      expect(hides(strings, 'SubagentHandback'), `no SubagentHandback on the ${surface}`).toBe(true)
+    }
+  })
+
+  test('a finished subagent that ended with SubagentHandback shows its calls and last tool without the handback', async ($, on) => {
+    const w = await stage($, on)
+    await spawnSubagent($, 'coding-worker')
+    await w.step(WORKER, [read('/w/a.rb')])
+    await w.step(WORKER, [handback])
+    await w.finish(WORKER, 'coding-worker')
+    for (const surface of SURFACES) {
+      const strings = await w.panel(surface)
+      expect(showsCalls(strings, 1), `1 call on the ${surface}`).toBe(true)
+      expect(shows(strings, 'Read a.rb'), `Read a.rb on the ${surface}`).toBe(true)
+      expect(hides(strings, 'SubagentHandback'), `no SubagentHandback on the ${surface}`).toBe(true)
+    }
+  })
+
+  test('a tool other than SubagentHandback still shows as the most recent tool, even when named like it', async ($, on) => {
+    const w = await stage($, on)
+    await spawnSubagent($, 'coding-worker')
+    await w.step(WORKER, [read('/w/a.rb'), { name: 'SubagentStatus', input: {} }])
+    for (const surface of SURFACES) {
+      const strings = await w.panel(surface)
+      expect(showsCalls(strings, 2), `2 calls on the ${surface}`).toBe(true)
+      expect(shows(strings, 'SubagentStatus'), `SubagentStatus on the ${surface}`).toBe(true)
+    }
+  })
+
   // ----- 7. non-roster subagents
 
   test('a non-roster subagent such as Explore gets the same activity display', async ($, on) => {
