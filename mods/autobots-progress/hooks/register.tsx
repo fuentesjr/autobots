@@ -13,7 +13,6 @@ const panel = atom({ plugin: 'autobots-progress', key: 'panel' } as const, {
 const now = atom({ plugin: 'autobots-progress', key: 'now' } as const, 0)
 
 const TOOL = 'mcp__autobots-progress__progress'
-const STEP_TOOL = 'mcp__autobots-progress__step'
 const PANE = 'autobots-agents'
 const PHASES: readonly Phase[] = ['plan', 'design', 'delegate', 'review', 'close']
 const ACCENT = '#8f8cf4'
@@ -576,12 +575,8 @@ ${tile(0, s.cost, '≈' + fmtCost(t.cost))}${tile(1, s.tokens, fmtTokens(t.token
 
 const headerHeight = (title: string): number => (title ? 72 : 44)
 
-// The task's own progress when the worker reports steps; a finished run is full.
-const progressOf = (a: AgentRun): number | null => {
-  if (a.status === 'done') return 1
-  if (a.stepTotal) return Math.min(1, (a.stepDone ?? 0) / a.stepTotal)
-  return null
-}
+// A finished run is full; a running one has no progress of its own, only its context fill.
+const progressOf = (a: AgentRun): number | null => (a.status === 'done' ? 1 : null)
 
 const ctxOf = (a: AgentRun): number => (a.contextMax ? Math.min(100, Math.round((a.contextTokens / a.contextMax) * 100)) : 0)
 
@@ -597,9 +592,7 @@ const agentSvg = (W: number, a: AgentRun, at: number): string => {
   const barW = textW
   const progress = progressOf(a)
   const stats = `ctx ${ctx}% · ${fmtTokens(a.contextTokens)}  ≈${fmtCost(a.costUsd)}  ${fmtTime(elapsed(a, at))}`
-  const steps = a.stepTotal ? `${a.stepDone ?? 0}/${a.stepTotal}${a.stepNote ? ' · ' + a.stepNote : ''}` : ''
-  const stepsW = Math.max(0, barW - textWidth(stats, 11) - 12)
-  // Without reported steps the bar falls back to the context, drawn grey.
+  // A running agent's bar is its context fill, drawn grey.
   const fillW = Math.round(barW * (progress ?? ctx / 100))
   return svg(
     W,
@@ -607,7 +600,6 @@ const agentSvg = (W: number, a: AgentRun, at: number): string => {
     `${crab(0, 14, costumeOf(a.type), false, a.status === 'running')}
 <text class="t" x="42" y="18" font-family="${FONT}" font-size="13" font-weight="600">${xml(fitText(a.description || a.type, 13, textW))}</text>
 <text x="42" y="34" font-family="${FONT}" font-size="11"><tspan fill="${color}">${xml(role === 'other' ? a.type : role)}</tspan><tspan class="s">  ${xml(meta.join('  ·  '))}</tspan></text>
-${steps && stepsW > 30 ? `<text class="t" x="42" y="49" font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${xml(fitText(steps, 11, stepsW))}</text>` : ''}
 <text class="s" x="${42 + barW}" y="49" text-anchor="end" font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${stats}</text>
 <rect class="k" x="42" y="55" width="${barW}" height="4" rx="2"/><rect${progress === null ? ' class="m"' : ''} x="42" y="55" width="${fillW}" height="4" rx="2"${progress === null ? '' : ` fill="${color}"`}/>
 ${statusMark(W - 8, 16, a.status, color)}
@@ -717,22 +709,6 @@ export const register: Register = (on, options) => {
         },
       },
     })
-    await $.tool.register({
-      name: 'step',
-      description:
-        'For autobots subagents: report progress on your own task to the agents panel. ' +
-        'Right after reading the brief, call it with `total` (your plan in 3-8 steps) and `done: 0`; ' +
-        'call it again as each step finishes. Cheap and silent: it only draws a bar.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          done: { type: 'integer', minimum: 0, description: 'Steps finished so far.' },
-          total: { type: 'integer', minimum: 1, description: 'Steps planned; may change if the plan changes.' },
-          note: { type: 'string', description: 'The step in progress, a few words.' },
-        },
-        required: ['done'],
-      },
-    })
     await $.command.register({
       name: 'agents-info',
       description: 'Show or hide the panel of subagents: running, finished and planned, with model, context, cost and time',
@@ -765,22 +741,6 @@ export const register: Register = (on, options) => {
     const next = await update($, flow, p => merge(p, input))
     if (next && input.tasks?.length) await autoOpen($, next.title)
     return { result: `ok: ${label(next ?? blank())}` }
-  })
-
-  // A worker's own progress: the call runs in the worker's loop, so agentId names it.
-  on('tool.call', { tool: STEP_TOOL }, async ($, e) => {
-    const input = e as unknown as { done?: number; total?: number; note?: string }
-    const agentId = e.agentId
-    if (!agentId) return { result: 'ignored: only subagents report steps' }
-    await update($, agents, list =>
-      list.map(a => {
-        if (a.agentId !== agentId) return a
-        const total = Math.max(0, Math.round(input.total ?? a.stepTotal ?? 0))
-        const done = Math.max(0, Math.round(input.done ?? a.stepDone ?? 0))
-        return { ...a, stepTotal: total, stepDone: total ? Math.min(total, done) : done, stepNote: input.note?.trim() || undefined }
-      }),
-    )
-    return { result: 'ok' }
   })
 
   // Safety net: worker launches move the faint layer even if the orchestrator forgets to report.
@@ -984,7 +944,6 @@ export const register: Register = (on, options) => {
       const ctx = ctxOf(a)
       const progress = progressOf(a)
       const model = a.effort ? `${modelName(a.model)} · ${a.effort}` : modelName(a.model)
-      const steps = a.stepTotal ? `${a.stepDone ?? 0}/${a.stepTotal}${a.stepNote ? ' ' + a.stepNote : ''} · ` : ''
       return (
         <Box key={a.id} flexDirection="column" marginBottom={1}>
           <Box flexDirection="row" gap={1}>
@@ -1004,7 +963,7 @@ export const register: Register = (on, options) => {
             {progress === null ? <Text dimColor>{ctxBar(ctx, barW)}</Text> : <Text color={color}>{ctxBar(progress * 100, barW)}</Text>}
             <Text dimColor>
               {' '}
-              {steps}ctx {ctx}% · {fmtTokens(a.contextTokens)} ≈{fmtCost(a.costUsd)} {fmtTime(elapsed(a, at))}
+              ctx {ctx}% · {fmtTokens(a.contextTokens)} ≈{fmtCost(a.costUsd)} {fmtTime(elapsed(a, at))}
             </Text>
           </Text>
         </Box>

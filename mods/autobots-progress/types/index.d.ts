@@ -34,10 +34,6 @@ export type AgentRun = {
   costUsd: number
   steps: number
   round: number
-  /** Self-reported by the worker through the `step` tool. */
-  stepDone?: number
-  stepTotal?: number
-  stepNote?: string
 }
 
 export type Panel = {

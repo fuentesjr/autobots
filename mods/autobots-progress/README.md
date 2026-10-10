@@ -14,7 +14,8 @@ claude --plugin-dir mods/autobots-progress
 ## Tools it adds
 
 - `mcp__autobots-progress__progress`: the dispatcher reports the plan (each task with its `role`), phase and accepted tasks. The autobots `SKILL.md` drives it.
-- `mcp__autobots-progress__step`: a subagent reports its own steps. Roster roles do not have it in their tool allowlists yet, so the panel shows each worker's context fill in grey instead.
+
+Subagents do not report their own steps. The panel shows each running worker's context fill as its bar, in grey.
 
 Cost is a rough estimate from token counts and a built-in per-model price table (`PRICES` in `hooks/register.tsx`), not a bill.
 

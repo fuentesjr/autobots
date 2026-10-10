@@ -140,14 +140,15 @@ const showsTitle = (strings: string[], title: string): boolean =>
   strings.some(s => s === title || s.startsWith(`${title}: `))
 
 describe('identity', () => {
-  test('the model-callable tools are mcp__autobots-progress__progress and mcp__autobots-progress__step', async ($, on) => {
+  test('the only model-callable tool is mcp__autobots-progress__progress; there is no step tool', async ($, on) => {
     const h = await boot($, on)
     // Registered by short name; the engine names them mcp__<plugin>__<name>.
-    expect(h.registeredTools.map(t => t.name).sort()).toEqual(['progress', 'step'])
+    expect(h.registeredTools.map(t => t.name)).toEqual(['progress'])
 
-    // A call to a tool name nothing answers rejects, so these resolving means the mod serves both names.
+    // A call to a tool name nothing answers rejects: progress resolving means the mod serves it,
+    // step rejecting means the mod does not.
     await expect($.tool.call({ tool: PROGRESS_TOOL, title: 'Identity check' } as never)).resolves.toBeDefined()
-    await expect($.tool.call({ tool: STEP_TOOL, done: 1 } as never)).resolves.toBeDefined()
+    await expect($.tool.call({ tool: STEP_TOOL, done: 1 } as never)).rejects.toBeDefined()
   })
 
   test('the plugin is named autobots-progress', async ($, on) => {
