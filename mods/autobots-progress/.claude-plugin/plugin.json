@@ -1,10 +1,9 @@
 {
-  "name": "savvy-progress",
-  "version": "1.2.0",
-  "description": "Progress bar above the prompt for /savvy-flow, plus an agents panel (/agents-info): running, finished and planned subagents with model, task progress, context, cost and time.",
+  "name": "autobots-progress",
+  "version": "0.1.0",
+  "description": "Progress bar above the prompt for the autobots dispatcher, plus an agents panel (/agents-info): running, finished and planned subagents with model, task progress, context, cost and time.",
   "author": {
-    "name": "johnnyvizz",
-    "url": "https://github.com/johnnyvizz"
+    "name": "Salvador Fuentes Jr."
   },
   "types": "./types/index.d.ts",
   "userConfig": {
@@ -20,7 +19,5 @@
       ]
     }
   },
-  "homepage": "https://github.com/johnnyvizz/claude-kit/tree/main/plugins/savvy-progress",
-  "repository": "https://github.com/johnnyvizz/claude-kit",
   "license": "MIT"
 }

@@ -114,6 +114,16 @@ A request for an unregistered pattern falls back to `orchestrator-worker`, with 
 
 Port intentional shared changes into Autobots first, then into Optimites. Platform-specific tool names, model pins, and install paths are expected to differ.
 
+## Optional progress panel
+
+`mods/autobots-progress` is an optional Claude Code mod that shows the dispatcher's progress bar above the prompt and a panel of subagents (`/agents-info`), colored by roster role, with model, context, cost estimate and time. It is derived from savvy-progress by johnnyvizz under the MIT license; see `mods/autobots-progress/LICENSE` and its README. `install.sh` does not install it. Load it for a session with:
+
+```sh
+claude --plugin-dir mods/autobots-progress
+```
+
+The dispatcher reports progress only when the mod's tool is present and skips silently otherwise.
+
 ## Further reading
 
 - [`docs/cheatsheet.md`](docs/cheatsheet.md) — quick reference for triggering dispatch, the roster, patterns, and recipes.

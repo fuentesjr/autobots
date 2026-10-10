@@ -2,7 +2,7 @@ export type Phase = 'plan' | 'design' | 'delegate' | 'review' | 'close'
 
 export type PlannedTask = {
   title: string
-  tier: string
+  role: string
   after: number[]
 }
 
@@ -48,7 +48,7 @@ export type Panel = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'savvy-progress': {
+    'autobots-progress': {
       flow: Flow | null
       agents: AgentRun[]
       panel: Panel
