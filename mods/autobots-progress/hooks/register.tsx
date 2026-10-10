@@ -321,23 +321,6 @@ const ROLE_COLOR: Record<string, string> = {
 
 const colorOf = (role: string): string => ROLE_COLOR[role] ?? '#888780'
 
-// Each role wears one of the five costumes, by function. The costume keys are
-// upstream's tier names: fable = astronaut, heavy = detective, careful = engineer,
-// medium = chef, light = racer.
-const ROLE_COSTUME: Record<string, string> = {
-  planner: 'fable',
-  advisor: 'fable',
-  'helper-worker': 'heavy',
-  'forensic-analyst': 'heavy',
-  'edge-case-analyst': 'heavy',
-  reviewer: 'heavy',
-  'doc-reviewer': 'heavy',
-  'coding-worker': 'careful',
-  'qa-engineer': 'careful',
-  'spec-test-writer': 'medium',
-  'fast-coding-worker': 'light',
-}
-
 // USD per million tokens: input, output, cache read, cache write (5-minute TTL).
 // The engine reports tokens, not money, so the panel's cost is an estimate.
 const PRICES: [RegExp, [number, number, number, number]][] = [
@@ -514,69 +497,99 @@ const crabBody = (f: Fill, armFront = 0, armCls?: string): void => {
 
 // Pure CSS, run by the compositor: no redraws. Periods divide one second, so the
 // once-a-second redraw of a running row restarts them in phase. Every crab walks;
-// each costume adds its prop's own motion on top.
+// some costumes add their prop's own motion on top.
 const CRAB_CSS = `<style>
 .run .la{animation:st .5s steps(1) infinite}.run .lb{animation:st .5s steps(1) infinite -.25s}
 .run .bd{animation:bob .5s steps(1) infinite -.125s}
 .run g{transform-box:fill-box}
 @keyframes st{50%{transform:translateY(-1px)}}@keyframes bob{50%{transform:translateY(1px)}}
-.c-fable.run{animation:float 1s ease-in-out infinite}
-.c-fable.run .la,.c-fable.run .lb,.c-fable.run .bd{animation:none}
-.c-fable.run .ant{animation:blink 1s steps(1) infinite}
-.c-fable.run .star{animation:blink .5s steps(1) infinite -.25s}
-@keyframes float{50%{transform:translateY(-2px)}}@keyframes blink{50%{opacity:.15}}
-.c-heavy.run .it{animation:scan 1s steps(1) infinite}
-.c-heavy.run .gl{animation:blink 1s steps(1) infinite -.5s}
+@keyframes blink{50%{opacity:.15}}
+.c-forensic-analyst.run .it,.c-reviewer.run .it{animation:scan 1s steps(1) infinite}
+.c-forensic-analyst.run .gl{animation:blink 1s steps(1) infinite -.5s}
 @keyframes scan{25%{transform:translate(-1px,1px)}50%{transform:translate(-2px,2px)}75%{transform:translate(-1px,1px)}}
-.c-careful.run .it{transform-origin:100% 100%;animation:twist .5s ease-in-out infinite}
+.c-coding-worker.run .it{transform-origin:100% 100%;animation:twist .5s ease-in-out infinite}
 @keyframes twist{50%{transform:rotate(-35deg)}}
-.c-medium.run .pan{transform-origin:0 50%;animation:tilt 1s ease-in-out infinite}
-.c-medium.run .egg{animation:flip 1s ease-in-out infinite}
-@keyframes tilt{20%,40%{transform:rotate(-12deg)}}@keyframes flip{30%{transform:translateY(-5px) scaleY(-1)}60%{transform:translateY(0)}}
-.c-light.run .la{animation-duration:.25s}.c-light.run .lb{animation-duration:.25s;animation-delay:-.125s}
-.c-light.run .flag{transform-origin:0 50%;animation:wave .25s steps(1) infinite}
-@keyframes wave{50%{transform:skewY(-12deg) scaleX(.85)}}
-.c-explore.run .it{transform-origin:50% 100%;animation:fence .5s ease-in-out infinite}
+.c-fast-coding-worker.run .la{animation-duration:.25s}.c-fast-coding-worker.run .lb{animation-duration:.25s;animation-delay:-.125s}
+.c-fast-coding-worker.run .star,.c-edge-case-analyst.run .star{animation:blink .5s steps(1) infinite -.25s}
+.c-explore.run .it,.c-qa-engineer.run .it{transform-origin:50% 100%;animation:fence .5s ease-in-out infinite}
 @keyframes fence{50%{transform:rotate(25deg)}}
 @media (prefers-reduced-motion: reduce){.run,.run g{animation:none!important}}
 </style>`
 
+// One costume per role, keyed by its name, plus `explore`; anything else is the plain crab.
+// `t` is the role's color. The terminal shows these at about 6×3 cells: bold props, few pixels.
 const COSTUMES: Record<string, (f: Fill, t: string) => void> = {
-  // Fable: astronaut in a glass dome; floats instead of walking, the antenna and the star blink.
-  fable: (f, t) => {
-    crabBody(f)
-    f(6, 7, 18, 1, '#E6E8EE'); f(5, 8, 1, 14, '#E6E8EE'); f(24, 8, 1, 14, '#E6E8EE'); f(6, 22, 18, 1, '#C9CCD2')
-    f(6, 8, 18, 14, 'rgba(169,214,245,.32)'); f(8, 9, 2, 1, '#fff'); f(8, 10, 1, 2, '#fff')
-    f(14, 4, 2, 3, '#C9CCD2'); f(14, 2, 2, 2, t, 'ant'); f(13, 18, 4, 2, t)
-    f(27, 3, 1, 3, '#F5C542', 'star'); f(26, 4, 3, 1, '#F5C542', 'star')
+  // Planner: holds up a rolled blueprint, unfurled between its two rolls.
+  planner: (f, t) => {
+    crabBody(f, -4)
+    stamp(f, 19, 0, ['crrrrrrrrrc', 'crrrrrrrrrc', '.bbbbbbbbb.', '.bwwwwwbwb.', '.bwbbbwbwb.', '.bwbbbwwwb.', '.bwwwwwbbb.', 'crrrrrrrrrc', 'crrrrrrrrrc'], { r: '#2F6DB5', b: '#5B93D6', w: '#F8F6F1', c: t })
   },
-  // Heavy: detective with a deerstalker; the magnifier sweeps and glints.
-  heavy: (f, t) => {
+  // Advisor: a graduation cap; the tassel hangs in the role's color.
+  advisor: (f, t) => {
+    crabBody(f)
+    stamp(f, 3, 4, ['...........kk...........', 'kkkkkkkkkkkkkkkkkkkkkkkk', '..kkkkkkkkkkkkkkkkkkkk..', '......kkkkkkkkkkkk......', '......kkkkkkkkkkkk......'], { k: '#2A2A2C' })
+    f(14, 4, 2, 1, t); f(16, 5, 9, 1, t); f(25, 5, 1, 6, t); f(24, 11, 3, 2, t)
+  },
+  // Coding worker: engineer in a hard hat; the wrench turns a bolt.
+  'coding-worker': (f, t) => {
+    crabBody(f)
+    stamp(f, 6, 4, ['.....yyyyyyyy.....', '...yyyyyhhyyyyy...', '..yyyyyyhhyyyyyy..', '..yyyyyyhhyyyyyy..', '.yyyyyyyhhyyyyyyy.', 'dddddddddddddddddd'], { y: '#F5C542', h: '#FBE08A', d: '#C99A1E' })
+    f(13, 5, 4, 2, t)
+    stamp(f, 0, 6, ['s...s', 'ss.ss', 'sssss', '.sss.', '..s..', '.sss.', '.sss.', '.sss.'], { s: '#B4B8BF' }, 'it')
+  },
+  // Fast coding worker: a headband whose tails stream back, and speed lines; runs at double pace.
+  'fast-coding-worker': (f, t) => {
+    crabBody(f)
+    f(7, 9, 16, 2, t); f(1, 8, 6, 2, t); f(2, 11, 5, 1, t)
+    for (const y of [15, 19]) f(0, y, 2, 1, '#F8F6F1', 'star')
+    f(0, 13, 3, 1, '#F8F6F1', 'star'); f(0, 21, 5, 1, '#F8F6F1', 'star')
+  },
+  // Helper worker: a big backpack with a bedroll on top.
+  'helper-worker': (f, t) => {
+    crabBody(f)
+    stamp(f, 0, 6, ['.eeeeeee.', 'eeeeeeeee', '.ppppppp.', 'ppppppppp', 'pdddddddp', 'ppppgpppp', 'ppppppppp', 'ppppppppp', 'ppppppppp', 'ppppppppp', 'ppppppppp', 'ppppppppp', '.ppppppp.'], { e: '#C9A66B', p: t, d: '#5A3519', g: '#F5C542' })
+    f(13, 10, 2, 12, '#5A3519')
+  },
+  // Forensic analyst: detective with a deerstalker; the magnifier sweeps and glints.
+  'forensic-analyst': (f, t) => {
     crabBody(f, -4, 'it')
     stamp(f, 6, 3, ['......bbbbbb......', '....bbcbbcbbbb....', '...bbbbbbbbbbbb...', '..bcbbcbbcbbcbbb..', '.bbbbbbbbbbbbbbbb.', 'dddddddddddddddddd'], { b: '#7A4A26', c: '#A0703F', d: '#5A3519' })
     f(6, 9, 18, 1, t)
     stamp(f, 23, 1, ['.kkk.', 'k...k', 'k...k', 'k...k', '.kkk.'], { k: '#3A3A3C' }, 'it')
     f(24, 2, 3, 3, 'rgba(169,214,245,.7)', 'it'); f(25, 6, 1, 4, '#7A4A26', 'it'); f(24, 2, 1, 1, '#fff', 'gl')
   },
-  // Careful: engineer in a hard hat; the wrench turns a bolt.
-  careful: (f, t) => {
+  // Doc reviewer: reading glasses and an open book held in both claws.
+  'doc-reviewer': (f, t) => {
     crabBody(f)
-    stamp(f, 6, 4, ['.....yyyyyyyy.....', '...yyyyyhhyyyyy...', '..yyyyyyhhyyyyyy..', '..yyyyyyhhyyyyyy..', '.yyyyyyyhhyyyyyyy.', 'dddddddddddddddddd'], { y: '#F5C542', h: '#FBE08A', d: '#C99A1E' })
-    f(13, 5, 4, 2, t)
-    stamp(f, 0, 10, ['.s.s', 'sss.', '.s..', '.s..'], { s: '#8E929A' }, 'it')
+    stamp(f, 7, 10, ['tttt......tttt', 't..tttttttt..t', 't..t......t..t', 'tttt......tttt'], { t })
+    stamp(f, 4, 15, ['.wwwwwwwkwwwwwwww.', 'wgggwwwwkwwgggwwww', 'wwwwwwwwkwwwwwwwww', 'wgggggwwkwwgggggww', 'wwwwwwwwkwwwwwwwww', 'cccccccccccccccccc'], { w: '#F8F6F1', g: '#9A9A96', k: '#C9CCD2', c: t })
   },
-  // Medium: chef, the toque traced from DockCrab's Sprites.chefHat; tosses the omelette.
-  medium: (f, t) => {
-    crabBody(f, -4, 'pan')
-    stamp(f, 6, 0, ['........lll.......', '.......lllll......', '.wwwwgwwwwwwgwwwww', 'wwwwwwwwwwwwwwwwww', 'wwwwwwwwwwwwwwwwww', 'wwwwwgwwwwwggwwwww', '.wwwwgwwwwwggwwwww', '.dddbbbbbbbbbbbbb.', '.dddbbbbbbbbbbbbb.', '.dddbbbbbbbbbbbbb.'], { w: '#F4F3EE', l: '#F7F6F2', g: '#D2D1C8', b: t, d: '#B45F43' })
-    f(22, 8, 7, 2, '#4A4A48', 'pan'); f(26, 10, 1, 1, '#4A4A48', 'pan'); f(24, 7, 3, 1, '#F5B731', 'egg')
+  // Reviewer: a gold monocle on its chain, and a red pen at the ready.
+  reviewer: (f, t) => {
+    crabBody(f, -4, 'it')
+    stamp(f, 17, 10, ['.ooo.', 'o...o', 'o...o', 'o...o', '.ooo.'], { o: '#F5C542' })
+    f(17, 15, 1, 1, '#F5C542'); f(16, 16, 1, 1, '#F5C542'); f(16, 18, 1, 1, '#F5C542')
+    stamp(f, 23, 0, ['..k.', '.rrr', '.rrr', '.www', '.rrr', '.rrr', '.rrr', '.rrr', '.rrr', '.ttt'], { k: INK, r: '#D0312D', w: '#F8F6F1', t }, 'it')
   },
-  // Light: racer in a helmet; runs at double pace, the checkered flag flutters.
-  light: (f, t) => {
+  // QA engineer: goggles pushed up, and a bug net to catch them with.
+  'qa-engineer': (f, t) => {
+    crabBody(f)
+    f(7, 9, 16, 1, INK)
+    stamp(f, 8, 6, ['.tttt..tttt.', 'tggggttggggt', 'tggggttggggt', '.tttt..tttt.'], { t, g: 'rgba(169,214,245,.9)' })
+    stamp(f, 0, 0, ['.wwwww.', 'wm.m.mw', 'w.m.m.w', 'wm.m.mw', '.wm.mw.', '..www..'], { w: '#F8F6F1', m: '#C9CCD2' }, 'it')
+    f(3, 6, 1, 9, '#7A4A26', 'it')
+  },
+  // Edge-case analyst: a caution cone for a hat; its stripes flash.
+  'edge-case-analyst': (f, t) => {
+    crabBody(f)
+    stamp(f, 8, 0, ['......oo......', '.....oooo.....', '.....wwww.....', '....oooooo....', '....oooooo....', '...wwwwwwww...', '...oooooooo...', '..oooooooooo..', 'tttttttttttttt', 'tttttttttttttt'], { o: '#F07A1E', w: '#F8F6F1', t })
+    f(11, 2, 8, 1, '#F8F6F1', 'star'); f(11, 5, 8, 1, '#F8F6F1', 'star')
+  },
+  // Spec-test writer: a checklist on a clipboard, a pencil behind the ear.
+  'spec-test-writer': (f, t) => {
     crabBody(f, -4)
-    stamp(f, 6, 5, ['....rrrrrrrrrr....', '..rrrrrrwwrrrrrr..', '.rrrrrrrwwrrrrrrr.', '.rrrrrrrwwrrrrrrr.', '.rrrrrrrwwrrrrrrr.', '.kkkkkkkkkkkkkkkkr'], { r: t, w: '#F8F6F1', k: INK })
-    f(25, 1, 1, 9, '#8E929A')
-    stamp(f, 26, 1, ['wkwk', 'kwkw', 'wkwk'], { w: '#F8F6F1', k: INK }, 'flag')
+    stamp(f, 20, 0, ['...ss...', 'bbbssbbb', 'bwwwwwwb', 'bwcwkkwb', 'bwwwwwwb', 'bwcwkkwb', 'bwwwwwwb', 'bwcwkkwb', 'bwwwwwwb', 'bbbbbbbb'], { s: '#8E929A', b: '#9C6B3E', w: '#F8F6F1', c: t, k: '#9A9A96' })
+    stamp(f, 3, 7, ['ppgyyyyyyyyyyyee.', 'ppgyyyyyyyyyyyeeek'], { p: '#E88FA0', g: '#C9CCD2', y: '#F5C542', e: '#E8C9A0', k: INK })
   },
   // Explore: pirate scouting the code; the cutlass fences.
   explore: f => {
@@ -585,16 +598,10 @@ const COSTUMES: Record<string, (f: Fill, t: string) => void> = {
     f(7, 11, 11, 1, INK); f(18, 11, 4, 3, INK)
     f(27, 6, 1, 9, '#C9CCD2', 'it'); f(26, 15, 3, 1, '#7A4A26', 'it')
   },
-  other: f => crabBody(f),
 }
 
-// What a crab is drawn as: a role, `explore`, or `other`.
+// What a crab is drawn as: a role, `explore`, or `other`, the plain crab.
 const costumeOf = (type: string): string => (type === 'Explore' ? 'explore' : roleOf(type))
-
-// The COSTUMES entry a crab wears: its group's, or one of its own keyed by its name.
-// A role gets its own costume by adding it to COSTUMES under the role's name and
-// dropping the role from ROLE_COSTUME; both surfaces follow.
-const kindOf = (costume: string): string => ROLE_COSTUME[costume] ?? costume
 
 const CRAB_SCALE = 1.1
 
@@ -603,49 +610,52 @@ type Rect = [x: number, y: number, w: number, h: number, c: string]
 // A costume's pixels by group, in paint order: the body (`bd`) first, then each
 // prop, then the leg pairs `la` and `lb`. Both the SVG crab and the terminal's
 // image are painted from this.
-const crabRects = (kind: string, accent: string): [string, Rect[]][] => {
+const crabRects = (costume: string): [string, Rect[]][] => {
   const groups = new Map<string, Rect[]>([['bd', []]])
   const f: Fill = (x, y, w, h, c, cls = 'bd') => {
     if (!groups.has(cls)) groups.set(cls, [])
     groups.get(cls)?.push([x, y, w, h, c])
   }
-  const draw = COSTUMES[kind] ?? ((g: Fill) => crabBody(g))
-  draw(f, accent)
+  const draw = COSTUMES[costume] ?? ((g: Fill) => crabBody(g))
+  draw(f, colorOf(costume))
   const legs = ['la', 'lb']
   return [...[...groups].filter(([cls]) => !legs.includes(cls)), ...legs.map((cls): [string, Rect[]] => [cls, groups.get(cls) ?? []])]
 }
 
+// A planned crab is drawn at this opacity, on both surfaces.
+const DIM = 0.45
+
 // Body and props nest inside `bd` so a prop rides the bob and adds its own motion;
 // legs stay outside it and step on their own.
 const crab = (x: number, y: number, costume: string, dim = false, isWalking = false, scale = CRAB_SCALE): string => {
-  const kind = kindOf(costume)
-  const groups = crabRects(kind, colorOf(costume))
+  const groups = crabRects(costume)
   const rects = (list: Rect[]) => list.map(([cx, cy, w, h, c]) => `<rect x="${cx}" y="${cy}" width="${w}" height="${h}" fill="${c}"/>`).join('')
   const group = ([cls, list]: [string, Rect[]]) => `<g class="${cls}">${rects(list)}</g>`
   const [[, bd = []] = [], ...props] = groups.slice(0, -2)
   const body = `<g class="bd">${rects(bd)}${props.map(group).join('')}</g>`
-  return `<g transform="translate(${x},${y}) scale(${scale})" opacity="${dim ? 0.45 : 1}" shape-rendering="crispEdges"><g class="c-${kind}${isWalking ? ' run' : ''}">${body}${groups.slice(-2).map(group).join('')}</g></g>`
+  return `<g transform="translate(${x},${y}) scale(${scale})" opacity="${dim ? DIM : 1}" shape-rendering="crispEdges"><g class="c-${costume}${isWalking ? ' run' : ''}">${body}${groups.slice(-2).map(group).join('')}</g></g>`
 }
 
 // The terminal's crab: the same pixels as an RGBA image of the 30×28 grid, still.
-// One per costume, not per role, so a costume's accent is its first role's color.
 const CRAB_GRID = { width: 30, height: 28 }
 const crabImages = new Map<string, { rgba: string; width: number; height: number }>()
 
 const rgbaOf = (c: string): number[] => {
   const m = /^rgba\(([\d.]+),([\d.]+),([\d.]+),([\d.]+)\)$/.exec(c)
   if (m) return m.slice(1).map(Number)
+  if (!/^#(?:[\da-f]{3}|[\da-f]{6})$/i.test(c)) throw new Error(`crab color ${c}: not #rgb, #rrggbb or rgba()`)
   const hex = c.length === 4 ? [...c.slice(1)].map(d => d + d).join('') : c.slice(1)
   return [0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16)).concat(1)
 }
 
-const crabImage = (kind: string) => {
-  const cached = crabImages.get(kind)
+// One per costume and dimness; a dimmed crab is the whole image at DIM opacity, as the SVG group is.
+const crabImage = (costume: string, dim = false) => {
+  const key = `${costume}:${dim}`
+  const cached = crabImages.get(key)
   if (cached) return cached
   const { width, height } = CRAB_GRID
   const buf = new Float64Array(width * height * 4) // straight RGB 0-255, alpha 0-1
-  const accent = colorOf(Object.keys(ROLE_COSTUME).find(r => ROLE_COSTUME[r] === kind) ?? kind)
-  for (const [, list] of crabRects(kind, accent)) {
+  for (const [, list] of crabRects(costume)) {
     for (const [x, y, w, h, c] of list) {
       const [r = 0, g = 0, b = 0, a = 1] = rgbaOf(c)
       for (let row = Math.max(0, y); row < Math.min(height, y + h); row++) {
@@ -660,9 +670,9 @@ const crabImage = (kind: string) => {
       }
     }
   }
-  const bytes = Uint8Array.from(buf, (v, i) => Math.round(i % 4 === 3 ? v * 255 : v))
+  const bytes = Uint8Array.from(buf, (v, i) => Math.round(i % 4 === 3 ? v * 255 * (dim ? DIM : 1) : v))
   const image = { rgba: btoa(String.fromCharCode(...bytes)), width, height }
-  crabImages.set(kind, image)
+  crabImages.set(key, image)
   return image
 }
 
@@ -1075,12 +1085,14 @@ export const register: Register = (on, options) => {
     // The crab spans three rows; six columns keep it about square in a 1:2 cell.
     const crabCols = 6
     const barW = Math.max(6, cols - crabCols - 2)
-    const rule = <Text dimColor wrap="truncate-end">{'─'.repeat(cols)}</Text>
-    const crabCell = (key: string, costume: string, color: string) =>
+    // One element per row: a shared instance would be one node in several places.
+    const rule = () => <Text dimColor wrap="truncate-end">{'─'.repeat(cols)}</Text>
+    // ▣ a run's crab, ▢ a planned task's, dimmed.
+    const crabCell = (key: string, costume: string, color: string, dim = false) =>
       'Image' in ui ? (
-        <ui.Image key={key} source={crabImage(kindOf(costume))} columns={crabCols} rows={3} alt="▣" />
+        <ui.Image key={key} source={crabImage(costume, dim)} columns={crabCols} rows={3} alt={dim ? '▢' : '▣'} />
       ) : (
-        <Text color={color}>▣</Text>
+        <Text color={color}>{dim ? '▢' : '▣'}</Text>
       )
     const row = (a: AgentRun) => {
       const role = roleOf(a.type)
@@ -1110,14 +1122,14 @@ export const register: Register = (on, options) => {
               </Text>
               <Box flexDirection="row" justifyContent="space-between" gap={2}>
                 <Text wrap="truncate-end">{activity}</Text>
-                <Text dimColor>
+                <Text dimColor wrap="truncate-end">
                   ctx {ctx}% · {fmtTokens(a.contextTokens)} ≈{fmtCost(a.costUsd)} {fmtTime(elapsed(a, at))}
                 </Text>
               </Box>
               {progress === null ? <Text dimColor>{ctxBar(ctx, barW)}</Text> : <Text color={color}>{ctxBar(progress * 100, barW)}</Text>}
             </Box>
           </Box>
-          {rule}
+          {rule()}
         </Box>
       )
     }
@@ -1171,15 +1183,20 @@ export const register: Register = (on, options) => {
             {planned.map(pl => {
               const role = roleOf(pl.role)
               return (
-                <Box key={`plan-${pl.n}`} flexDirection="column" marginBottom={1}>
-                  <Text dimColor wrap="truncate-end">
-                    <Text color={colorOf(role)}>▢</Text> {pl.n}. {pl.title} ◷
-                  </Text>
-                  <Text dimColor wrap="truncate-end">
-                    {'  '}
-                    {role}
-                    {pl.after.length ? ` · ${s.after} ${pl.after.join(', ')}` : ''}
-                  </Text>
+                <Box key={`plan-${pl.n}`} flexDirection="column">
+                  <Box flexDirection="row" gap={1}>
+                    {crabCell(`crab-plan-${pl.n}`, role, colorOf(role), true)}
+                    <Box flexDirection="column" flexGrow={1}>
+                      <Text dimColor wrap="truncate-end">
+                        {pl.n}. {pl.title} ◷
+                      </Text>
+                      <Text dimColor wrap="truncate-end">
+                        <Text color={colorOf(role)}>{role}</Text>
+                        {pl.after.length ? ` · ${s.after} ${pl.after.join(', ')}` : ''}
+                      </Text>
+                    </Box>
+                  </Box>
+                  {rule()}
                 </Box>
               )
             })}

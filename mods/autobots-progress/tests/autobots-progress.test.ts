@@ -71,7 +71,13 @@ async function boot($: Engine, on: On): Promise<Harness> {
   })
   // The Agent tool is the engine's; the test raises its spawn itself (see spawnSubagent).
   on('tool.call', { tool: 'Agent' }, async () => ({ result: 'started' }))
-  on('agent.spawn', async (_$, e) => ({ model: 'claude-sonnet-5-5', agentId: `agent-${e.subagentType}` }))
+  // Each spawn gets its own agent id: agent-<type> for the first of a type, agent-<type>-2 for the second.
+  const spawned = new Map<string, number>()
+  on('agent.spawn', async (_$, e) => {
+    const n = (spawned.get(e.subagentType) ?? 0) + 1
+    spawned.set(e.subagentType, n)
+    return { model: 'claude-sonnet-5-5', agentId: n === 1 ? `agent-${e.subagentType}` : `agent-${e.subagentType}-${n}` }
+  })
   on('ui.render', { component: 'AbovePrompt' }, async ($, e) => {
     const { Box } = $.ui.resolve(e)
     return Box({ key: ENGINE_BAND } as never)
@@ -905,21 +911,28 @@ describe('terminal agents panel matches the desktop', () => {
   const imagesOf = (els: Found[]): Found[] => els.filter(el => el.type === 'Image')
 
   // Descriptions that no other text of the panel contains, one per subagent.
-  const TITLES = ['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot', 'golf', 'hotel', 'india', 'juliet', 'kilo']
+  const TITLES = ['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot', 'golf', 'hotel', 'india', 'juliet', 'kilo', 'lima']
+
+  // A row is a crab Image and the texts that follow it, up to the next crab.
+  type Row = { image: Found; texts: string[] }
+  const rowsOf = (els: Found[]): Row[] => {
+    const rows: Row[] = []
+    for (const el of els) {
+      if (el.type === 'Image') rows.push({ image: el, texts: [] })
+      else if (rows.length > 0 && el.type === 'Text') rows.at(-1)?.texts.push(el.text)
+    }
+    return rows
+  }
 
   // Spawns one running subagent per type, titled alpha, bravo, ..., and returns the crab each row
-  // draws, by type. A row is the crab Image and the texts that follow it, up to the next crab.
+  // draws, by type.
   async function crabsOf($: Engine, on: On, types: string[]): Promise<Record<string, string>> {
     const w = await stage($, on)
     await $.command.run({ command: 'agents-info', args: '' } as never)
     for (const [i, type] of types.entries()) await spawnSubagent($, type, TITLES[i])
     const els = await w.elements('terminal')
 
-    const rows: { image: Found; texts: string[] }[] = []
-    for (const el of els) {
-      if (el.type === 'Image') rows.push({ image: el, texts: [] })
-      else if (rows.length > 0 && el.type === 'Text') rows.at(-1)?.texts.push(el.text)
-    }
+    const rows = rowsOf(els)
     const crabs: Record<string, string> = {}
     for (const [i, type] of types.entries()) {
       const row = rows.find(r => r.texts.some(t => t.includes(TITLES[i]!)))
@@ -954,33 +967,109 @@ describe('terminal agents panel matches the desktop', () => {
     expect(images.map(el => el.props.alt)).toEqual(['▣', '▣'])
   })
 
-  // ----- 3. the costume follows the role, grouped as on the desktop
+  // ----- 3. each type has its own crab
 
-  const SAME_GROUP: Record<string, string[]> = {
-    fable: ['planner', 'advisor'],
-    heavy: ['helper-worker', 'forensic-analyst', 'edge-case-analyst', 'reviewer', 'doc-reviewer'],
-    careful: ['coding-worker', 'qa-engineer'],
-  }
-  for (const [group, roles] of Object.entries(SAME_GROUP)) {
-    test(`the ${group} roles (${roles.join(', ')}) draw identical crabs`, async ($, on) => {
-      const crabs = await crabsOf($, on, roles)
-      for (const role of roles.slice(1)) expect(crabs[role], `${role} wears the same crab as ${roles[0]}`).toBe(crabs[roles[0]!])
-    })
-  }
+  // The eleven roster roles and the non-roster Explore type.
+  const ALL_TYPES: string[] = [...ROSTER, 'Explore']
 
-  // One role from each group; Explore is the non-roster type.
-  const REPRESENTATIVES = ['planner', 'reviewer', 'coding-worker', 'spec-test-writer', 'fast-coding-worker']
+  test('each of the 12 types (11 roster roles and Explore) draws a crab distinct from all 11 others', async ($, on) => {
+    const crabs = await crabsOf($, on, ALL_TYPES)
+    const sharing: string[] = []
+    for (const [i, a] of ALL_TYPES.entries()) {
+      for (const b of ALL_TYPES.slice(i + 1)) if (crabs[a] === crabs[b]) sharing.push(`${a} and ${b}`)
+    }
+    expect(sharing, 'pairs of types that wear the same crab').toEqual([])
+  })
 
-  test('roles from different groups (fable, heavy, careful, medium, light) draw different crabs', async ($, on) => {
-    const crabs = await crabsOf($, on, REPRESENTATIVES)
-    for (const [i, a] of REPRESENTATIVES.entries()) {
-      for (const b of REPRESENTATIVES.slice(i + 1)) expect(crabs[a], `${a} and ${b} wear different crabs`).not.toBe(crabs[b])
+  test('two running subagents of the same type, with different titles, draw the same crab', async ($, on) => {
+    const w = await stage($, on)
+    await $.command.run({ command: 'agents-info', args: '' } as never)
+    const titles = ALL_TYPES.map(type => [`first/${type}`, `second/${type}`] as const)
+    for (const [i, type] of ALL_TYPES.entries()) {
+      await spawnSubagent($, type, titles[i]![0])
+      await spawnSubagent($, type, titles[i]![1])
+    }
+
+    const rows = rowsOf(await w.elements('terminal'))
+    for (const [i, type] of ALL_TYPES.entries()) {
+      const [first, second] = titles[i]!.map(title => rows.find(r => r.texts.some(t => t.includes(title))))
+      expect(first, `a crab Image is drawn in the row of the first ${type} subagent`).toBeDefined()
+      expect(second, `a crab Image is drawn in the row of the second ${type} subagent`).toBeDefined()
+      expect(first, `the two ${type} subagents are two rows`).not.toBe(second)
+      expect(JSON.stringify(second?.image.props.source) === JSON.stringify(first?.image.props.source), `both ${type} subagents wear the same crab`).toBe(true)
     }
   })
 
-  test('the Explore subagent draws a crab different from each roster group', async ($, on) => {
-    const crabs = await crabsOf($, on, [...REPRESENTATIVES, 'Explore'])
-    for (const role of REPRESENTATIVES) expect(crabs.Explore, `Explore and ${role} wear different crabs`).not.toBe(crabs[role])
+  // ----- 3b. planned tasks draw a dimmed crab too
+
+  // Tasks planned through the progress tool, one per roster role, titled plan/<role>.
+  const PLANNED = ROSTER.map(role => ({ title: `plan/${role}`, role }))
+  const plan = ($: Engine) =>
+    $.tool.call({ tool: PROGRESS_TOOL, title: 'Crabs', total: PLANNED.length, phase: 'delegate', tasks: PLANNED } as never)
+
+  test('each planned row shows a crab Image with the alt ▢, drawn before the row title', async ($, on) => {
+    const w = await stage($, on)
+    await plan($)
+
+    const els = await w.elements('terminal')
+    const rows = rowsOf(els)
+    const seen = new Set<unknown>()
+    for (const { title } of PLANNED) {
+      const row = rows.find(r => r.texts.some(t => t.includes(title)))
+      expect(row, `a crab Image comes before the title ${title}`).toBeDefined()
+      expect(row?.image.props.alt, `the crab of ${title}`).toBe('▢')
+      expect(seen.has(row), `the title ${title} has a crab of its own`).toBe(false)
+      seen.add(row)
+    }
+    expect(textsOf(els).filter(t => t.includes('▢')), 'no ▢ glyph drawn as text').toEqual([])
+  })
+
+  test('a planned task draws a different crab from a running subagent of the same role', async ($, on) => {
+    const w = await stage($, on)
+    await plan($)
+    // Different descriptions from the planned titles: these runs are not the planned tasks.
+    for (const { role } of PLANNED) await spawnSubagent($, role, `run/${role}`)
+
+    const rows = rowsOf(await w.elements('terminal'))
+    const crabOf = (title: string) => rows.find(r => r.texts.some(t => t.includes(title)))?.image
+    for (const { role } of PLANNED) {
+      const planned = crabOf(`plan/${role}`)
+      const running = crabOf(`run/${role}`)
+      expect(planned, `a crab Image is drawn in the planned row of ${role}`).toBeDefined()
+      expect(running, `a crab Image is drawn in the running row of ${role}`).toBeDefined()
+      expect(planned?.props.alt, `the planned row of ${role} has a ▢ crab, not a ▣ one`).toBe('▢')
+      expect(running?.props.alt, `the running row of ${role} is running`).toBe('▣')
+      expect(JSON.stringify(planned?.props.source) === JSON.stringify(running?.props.source), `planned and running ${role} wear different crabs`).toBe(false)
+    }
+  })
+
+  test('planned tasks of different roles draw pairwise distinct crabs, and two planned tasks of the same role draw equal crabs', async ($, on) => {
+    const w = await stage($, on)
+    // Two tasks per roster role, titled so that no title contains another.
+    const tasks = ROSTER.flatMap(role => [
+      { title: `plan-a/${role}`, role },
+      { title: `plan-b/${role}`, role },
+    ])
+    await $.tool.call({ tool: PROGRESS_TOOL, title: 'Crabs', total: tasks.length, phase: 'delegate', tasks } as never)
+
+    const rows = rowsOf(await w.elements('terminal'))
+    const crabOf = (title: string): string | undefined => {
+      const row = rows.find(r => r.texts.some(t => t.includes(title)))
+      expect(row, `a crab Image comes before the planned title ${title}`).toBeDefined()
+      return JSON.stringify(row?.image.props.source)
+    }
+    const crabs: Record<string, string | undefined> = {}
+    for (const role of ROSTER) {
+      const a = crabOf(`plan-a/${role}`)
+      const b = crabOf(`plan-b/${role}`)
+      expect(a === b, `the two planned ${role} tasks wear the same crab`).toBe(true)
+      crabs[role] = a
+    }
+    const sharing: string[] = []
+    for (const [i, a] of ROSTER.entries()) {
+      for (const b of ROSTER.slice(i + 1)) if (crabs[a] === crabs[b]) sharing.push(`${a} and ${b}`)
+    }
+    expect(sharing, 'pairs of planned roles that wear the same crab').toEqual([])
   })
 
   // ----- 4. the stat tiles

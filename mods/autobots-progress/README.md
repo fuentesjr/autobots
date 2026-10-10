@@ -13,6 +13,8 @@ A Claude Code mod for the autobots dispatcher: a progress bar above the prompt a
 claude --plugin-dir mods/autobots-progress
 ```
 
+On the terminal, clicking the bar's and panel's buttons works only in the fullscreen layout (`/tui fullscreen`). The keyboard works in either layout: `ctrl+x tab` focuses the panel or bar, `tab` moves between buttons, `enter` presses one and `esc` returns to the prompt.
+
 ## Tools it adds
 
 - `mcp__autobots-progress__progress`: the dispatcher reports the plan (each task with its `role`), phase and accepted tasks. The autobots `SKILL.md` drives it.
@@ -21,15 +23,24 @@ Cost is a rough estimate from token counts and a built-in per-model price table 
 
 ## Roles
 
-Each role has its own color, and its crab wears one of five animated props. `prefers-reduced-motion` stops them.
+Each role has its own color and its own crab, dressed for the job. Planned tasks show their role's crab dimmed. On the desktop some props move; `prefers-reduced-motion` stops them. The terminal draws the same pixels as a still image.
 
-| Prop | Roles |
+| Role | Crab |
 | --- | --- |
-| astronaut (floats) | planner, advisor |
-| detective (sweeps a magnifier) | helper-worker, forensic-analyst, edge-case-analyst, reviewer, doc-reviewer |
-| engineer (turns a wrench) | coding-worker, qa-engineer |
-| chef (tosses an omelette) | spec-test-writer |
-| racer (runs with a flag) | fast-coding-worker |
+| planner | holds up a rolled blueprint |
+| advisor | wears a graduation cap |
+| coding-worker | wears a hard hat and turns a wrench |
+| fast-coding-worker | wears a headband, with speed lines |
+| helper-worker | carries a backpack |
+| forensic-analyst | wears a deerstalker and holds a magnifying glass |
+| doc-reviewer | wears reading glasses and holds an open book |
+| reviewer | wears a monocle and holds a red pen |
+| qa-engineer | wears goggles and holds a bug net |
+| edge-case-analyst | wears a caution cone |
+| spec-test-writer | holds a checklist, with a pencil |
+| Explore | dresses as a pirate |
+
+Other subagent types get a plain crab.
 
 ## Settings
 
