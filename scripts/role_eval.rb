@@ -375,7 +375,7 @@ module RoleEval
       first_suite_tail = suite.tail
       suite = run_graded.(c["suite"])
     end
-    hidden = run_graded.(["bash", File.join(EVAL_DIR, c["hidden"]), ws])
+    hidden = run_graded.(["bash", File.expand_path(c["hidden"], EVAL_DIR), ws])
     g = { "hidden" => hidden.ok? ? 1 : 0, "suite" => suite.ok? ? 1 : 0,
           "scope" => bad.empty? ? 1 : 0, "changed" => paths.empty? ? 0 : 1 }
     g = { "pass" => g.values.all?(1) ? 1 : 0 }.merge(g)

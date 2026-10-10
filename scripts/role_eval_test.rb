@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require "minitest/autorun"
-require "pathname"
 require "tmpdir"
 require_relative "role_eval"
 
@@ -152,7 +151,7 @@ class RoleEvalTest < Minitest::Test
       File.write(hidden, "exit 0\n")
       # Fails on the first run only; the marker lives outside the workspace.
       marker = File.join(dir, "ran")
-      c = { "offlimits" => [], "hidden" => Pathname(hidden).relative_path_from(RoleEval::EVAL_DIR).to_s,
+      c = { "offlimits" => [], "hidden" => hidden,
             "suite" => "if [ -e #{marker} ]; then exit 0; else touch #{marker}; echo boom; exit 1; fi" }
       g, detail = RoleEval.grade(c, ws, base, {})
       assert_equal({ "pass" => 1, "hidden" => 1, "suite" => 1, "scope" => 1, "changed" => 1 }, g)
