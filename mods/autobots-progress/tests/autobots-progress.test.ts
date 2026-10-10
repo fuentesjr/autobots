@@ -889,8 +889,8 @@ describe('terminal agents panel matches the desktop', () => {
         await $.turn.complete({ reason: 'answer', answer: 'done', durationMs: 1, isAborted: false, turnId: 'turn-1', agentId: `agent-${type}` })
         await $.classic.SubagentStop({ stop_hook_active: false, agent_id: `agent-${type}`, agent_transcript_path: '', agent_type: type })
       },
-      // Every element the open panel draws on a surface, in document order.
-      async elements(surface: 'terminal' | 'desktop'): Promise<Found[]> {
+      // Every element the open panel draws on a surface, in document order, at `bodyColumns` wide.
+      async elements(surface: 'terminal' | 'desktop', bodyColumns = 100): Promise<Found[]> {
         if (h.openedPanes.length === 0) await $.command.run({ command: 'agents-info', args: '' } as never)
         expect(h.openedPanes.length, 'the agents panel is open').toBeGreaterThan(0)
         const pane = await $.ui.mount({
@@ -898,11 +898,28 @@ describe('terminal agents panel matches the desktop', () => {
           surface,
           component: 'Pane',
           requestId: h.openedPanes[0],
-          props: { title: 'Agents', isFocused: false, bodyColumns: 100, placement: 'inline', scroll: { offset: 0, bodyRows: 30 }, view: {} },
+          props: { title: 'Agents', isFocused: false, bodyColumns, placement: 'inline', scroll: { offset: 0, bodyRows: 30 }, view: {} },
         })
         const found = await pane.findAll({})
         await pane.unmount()
         return found
+      },
+      // Presses the panel's Collapse / Expand toggle on the terminal, found by its label.
+      async toggle(bodyColumns = 100): Promise<void> {
+        if (h.openedPanes.length === 0) await $.command.run({ command: 'agents-info', args: '' } as never)
+        const requestId = h.openedPanes[0]!
+        const pane = await $.ui.mount({
+          plugin: 'autobots-progress',
+          surface: 'terminal',
+          component: 'Pane',
+          requestId,
+          props: { title: 'Agents', isFocused: false, bodyColumns, placement: 'inline', scroll: { offset: 0, bodyRows: 30 }, view: {} },
+        })
+        const button = await pane.find({ type: 'Button', text: /^(Collapse|Expand)$/ })
+        expect(button, 'the panel draws a Button labelled Collapse or Expand').toBeDefined()
+        expect(button?.key, 'the toggle Button has a key to press it by').toBeDefined()
+        await $.ui.press({ plugin: 'autobots-progress', key: button!.key!, requestId, surface: 'terminal' })
+        await pane.unmount()
       },
     }
   }
@@ -1143,5 +1160,189 @@ describe('terminal agents panel matches the desktop', () => {
     const terminal = textsOf(await w.elements('terminal'))
     for (const title of titles) expect(terminal.some(t => t.includes(title)), `the terminal shows the title ${title} as text`).toBe(true)
     for (const role of roles) expect(terminal.some(t => t.includes(role)), `the terminal shows the role ${role} as text`).toBe(true)
+  })
+
+  // ----- 7. Collapse mode on the terminal draws a strip of crabs
+
+  // Crew roles by group; every item has a type of its own, so a crab names exactly one item.
+  type Group = 'running' | 'finished' | 'planned'
+  type Crew = { w: Awaited<ReturnType<typeof stage>>; groupOf: Map<string, { group: Group; title: string }> }
+
+  // Plans `planned` roster roles (titled plan/<role>), finishes one subagent per `finished` type, and
+  // leaves one running per `running` type (titles alpha, bravo, ... in the order given, running first).
+  // Reads the expanded panel at `columns` wide and records which crab each item wears there.
+  async function buildCrew($: Engine, on: On, columns: number, spec: { running: string[]; finished: string[]; planned: string[] }): Promise<Crew> {
+    const w = await stage($, on)
+    if (spec.planned.length > 0) {
+      const tasks = spec.planned.map(role => ({ title: `plan/${role}`, role }))
+      await $.tool.call({ tool: PROGRESS_TOOL, title: 'Crabs', total: tasks.length, phase: 'delegate', tasks } as never)
+    }
+    const title = (i: number) => TITLES[i]!
+    for (const [i, type] of spec.finished.entries()) {
+      await spawnSubagent($, type, title(spec.running.length + i))
+      await w.finish(type)
+    }
+    for (const [i, type] of spec.running.entries()) await spawnSubagent($, type, title(i))
+
+    const rows = rowsOf(await w.elements('terminal', columns))
+    const groupOf = new Map<string, { group: Group; title: string }>()
+    const items: { group: Group; title: string }[] = [
+      ...spec.running.map((_, i) => ({ group: 'running' as const, title: title(i) })),
+      ...spec.finished.map((_, i) => ({ group: 'finished' as const, title: title(spec.running.length + i) })),
+      ...spec.planned.map(role => ({ group: 'planned' as const, title: `plan/${role}` })),
+    ]
+    for (const item of items) {
+      const row = rows.find(r => r.texts.some(t => t.includes(item.title)))
+      expect(row, `the expanded panel draws a crab Image in the row of ${item.title}`).toBeDefined()
+      groupOf.set(JSON.stringify(row?.image.props.source), item)
+    }
+    expect(groupOf.size, 'every item wears a crab of its own in the expanded panel').toBe(items.length)
+    return { w, groupOf }
+  }
+
+  // The crabs of the strip, as the item each one is in the expanded panel.
+  const stripOf = (crew: Crew, els: Found[]) =>
+    imagesOf(els).map(img => {
+      const item = crew.groupOf.get(JSON.stringify(img.props.source))
+      expect(item, 'each crab of the strip has the image source of an item\'s crab in the expanded panel').toBeDefined()
+      return item!
+    })
+
+  const count = (texts: string[], mark: string): number => texts.join('').split(mark).length - 1
+  const moreOf = (els: Found[]): number[] =>
+    textsOf(els).flatMap(t => {
+      const m = /^\s*\+(\d+)\s*$/.exec(t)
+      return m ? [Number(m[1])] : []
+    })
+
+  const WIDE = { running: ['coding-worker', 'planner'], finished: ['reviewer'], planned: ['qa-engineer'] }
+  // 12 items: 5 running, 4 finished, 3 planned, each of a type of its own.
+  const MANY = {
+    running: [ROSTER[0], ROSTER[1], ROSTER[2], ROSTER[3], 'Explore'] as string[],
+    finished: [ROSTER[4], ROSTER[5], ROSTER[6], ROSTER[7]] as string[],
+    planned: [ROSTER[8], ROSTER[9], ROSTER[10]] as string[],
+  }
+
+  test('Collapse mode shows one crab Image per subagent and planned task, running first, then finished, then planned, when the width allows', async ($, on) => {
+    const crew = await buildCrew($, on, 200, WIDE)
+    await crew.w.toggle(200)
+
+    const strip = stripOf(crew, await crew.w.elements('terminal', 200))
+    expect(strip.map(i => i.title).sort(), 'one crab for each of the 4 items').toEqual(['alpha', 'bravo', 'charlie', 'plan/qa-engineer'])
+    expect(strip.map(i => i.group), 'running, then finished, then planned').toEqual(['running', 'running', 'finished', 'planned'])
+  })
+
+  test('a crab of the Collapse strip is the same image as that subagent\'s crab in the expanded panel, and a planned task\'s is its dimmed planned-row crab', async ($, on) => {
+    const crew = await buildCrew($, on, 200, WIDE)
+    await crew.w.toggle(200)
+
+    // The mapping is by image source: a strip crab that matches no expanded crab fails stripOf; here
+    // each item must be matched, so none is drawn as another item's crab.
+    const strip = stripOf(crew, await crew.w.elements('terminal', 200))
+    expect(strip, 'the strip draws crabs').toHaveLength(4)
+    const planned = strip.filter(i => i.group === 'planned')
+    expect(planned.map(i => i.title), 'the planned task wears its planned-row crab').toEqual(['plan/qa-engineer'])
+    expect(new Set(strip.map(i => i.title)).size, 'no two crabs of the strip are the same item\'s').toBe(4)
+  })
+
+  test('when all crabs fit the Collapse strip shows no +N', async ($, on) => {
+    const crew = await buildCrew($, on, 200, WIDE)
+    await crew.w.toggle(200)
+
+    const els = await crew.w.elements('terminal', 200)
+    expect(imagesOf(els), 'all 4 crabs fit at 200 columns').toHaveLength(4)
+    expect(moreOf(els), 'no +N Text').toEqual([])
+  })
+
+  test('when not all crabs fit the width the Collapse strip shows at least one crab, fewer than all, in order, and a +N Text counting the crabs not shown', async ($, on) => {
+    const crew = await buildCrew($, on, 40, MANY)
+    await crew.w.toggle(40)
+
+    const els = await crew.w.elements('terminal', 40)
+    const strip = stripOf(crew, els)
+    expect(strip.length, 'at least one crab is shown').toBeGreaterThanOrEqual(1)
+    expect(strip.length, 'not all 12 crabs fit 40 columns').toBeLessThan(12)
+    expect(new Set(strip.map(i => i.title)).size, 'no item is drawn twice').toBe(strip.length)
+    const order: Group[] = [...MANY.running.map(() => 'running' as const), ...MANY.finished.map(() => 'finished' as const), ...MANY.planned.map(() => 'planned' as const)]
+    expect(strip.map(i => i.group), 'the crabs shown are the first ones: running, then finished, then planned').toEqual(order.slice(0, strip.length))
+    expect(moreOf(els), 'one +N Text, N the number of crabs not shown').toEqual([12 - strip.length])
+  })
+
+  test('Collapse mode marks each running subagent shown with one ●, and no other crab with one', async ($, on) => {
+    const crew = await buildCrew($, on, 200, WIDE)
+    await crew.w.toggle(200)
+
+    const els = await crew.w.elements('terminal', 200)
+    const strip = stripOf(crew, els)
+    expect(strip, 'the strip draws crabs').toHaveLength(4)
+    expect(count(textsOf(els), '●'), 'one ● for each of the 2 running subagents').toBe(2)
+  })
+
+  test('when the Collapse strip is cut short, it shows one ● per running subagent still shown', async ($, on) => {
+    const crew = await buildCrew($, on, 40, MANY)
+    await crew.w.toggle(40)
+
+    const els = await crew.w.elements('terminal', 40)
+    const strip = stripOf(crew, els)
+    expect(strip.length, 'the strip draws crabs').toBeGreaterThanOrEqual(1)
+    expect(count(textsOf(els), '●'), 'one ● for each running subagent shown').toBe(strip.filter(i => i.group === 'running').length)
+  })
+
+  // ----- 8. the rest of Collapse mode on the terminal
+
+  const VALUE = { cost: /≈\$\d+\.\d{1,2}/, tokens: /\b\d+(\.\d)?[kM]\b/, time: /\b\d+:\d{2}\b/ }
+
+  test('the totals (≈ cost, tokens and time) stay visible in Collapse mode', async ($, on) => {
+    const w = await stage($, on)
+    await spawnSubagent($, 'coding-worker', 'alpha')
+    await w.work('coding-worker')
+    await w.h.clock.advance(47_000)
+    await w.toggle(200)
+
+    const texts = textsOf(await w.elements('terminal', 200))
+    expect(texts.some(t => VALUE.cost.test(t)), 'a cost value').toBe(true)
+    expect(texts.some(t => VALUE.tokens.test(t)), 'a tokens value').toBe(true)
+    expect(texts.some(t => VALUE.time.test(t)), 'a time value').toBe(true)
+  })
+
+  test('pressing the toggle again brings back the rows of the expanded panel', async ($, on) => {
+    const crew = await buildCrew($, on, 200, WIDE)
+    const rowTitles = ['alpha', 'bravo', 'charlie', 'plan/qa-engineer']
+    const toggleLabels = async () => (await crew.w.elements('terminal', 200)).filter(el => el.type === 'Button').map(el => el.text)
+    await crew.w.toggle(200)
+    expect(await toggleLabels(), 'after one press the panel is collapsed: the toggle reads Expand').toContain('Expand')
+    await crew.w.toggle(200)
+
+    const els = await crew.w.elements('terminal', 200)
+    const rows = rowsOf(els)
+    expect(rows, 'a row with a crab for each of the 4 items').toHaveLength(4)
+    for (const title of rowTitles) expect(rows.some(r => r.texts.some(t => t.includes(title))), `the row of ${title} is back`).toBe(true)
+    expect(await toggleLabels(), 'the toggle reads Collapse again').toContain('Collapse')
+  })
+
+  test('in Collapse mode the Cost, Tokens and Time tiles are not drawn', async ($, on) => {
+    const w = await stage($, on)
+    await spawnSubagent($, 'coding-worker', 'alpha')
+    await w.work('coding-worker')
+    await w.toggle(200)
+
+    const texts = textsOf(await w.elements('terminal', 200))
+    for (const label of [/^Cost$/, /^Tokens$/, /^Time$/]) expect(texts.some(t => label.test(t)), `no tile labelled ${label}`).toBe(false)
+  })
+
+  test('below 42 bodyColumns the terminal header shows the one-line summary instead of the tiles; from 42 it shows the tiles', async ($, on) => {
+    const w = await stage($, on)
+    await spawnSubagent($, 'coding-worker', 'alpha')
+    await w.work('coding-worker')
+    await w.h.clock.advance(47_000)
+
+    const narrow = textsOf(await w.elements('terminal', 41))
+    const oneLine = new RegExp(`${VALUE.cost.source}.*${VALUE.tokens.source}.*${VALUE.time.source}`)
+    expect(narrow.some(t => oneLine.test(t)), 'cost, tokens and time in one Text at 41 columns').toBe(true)
+    for (const label of [/^Cost$/, /^Tokens$/, /^Time$/]) expect(narrow.some(t => label.test(t)), `no tile labelled ${label} at 41 columns`).toBe(false)
+
+    const wide = textsOf(await w.elements('terminal', 42))
+    for (const label of [/^Cost$/, /^Tokens$/, /^Time$/]) expect(wide.some(t => label.test(t)), `a tile labelled ${label} at 42 columns`).toBe(true)
+    expect(wide.some(t => oneLine.test(t)), 'no one-line summary at 42 columns').toBe(false)
   })
 })

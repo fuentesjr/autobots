@@ -1139,6 +1139,14 @@ export const register: Register = (on, options) => {
         <Text bold>{value}</Text>
       </Box>
     )
+    // Collapse: the desktop's strip, a crab per item, under the one-line totals. A slot is the crab,
+    // a column for a running crab's ●, and the gap; when not all fit, four columns stay for "+N".
+    const strip = [
+      ...[...running, ...finished].map(a => ({ key: a.id, costume: costumeOf(a.type), color: colorOf(roleOf(a.type)), dim: false, isRunning: a.status === 'running' })),
+      ...planned.map(pl => ({ key: `plan-${pl.n}`, costume: roleOf(pl.role), color: colorOf(roleOf(pl.role)), dim: true, isRunning: false })),
+    ]
+    const slot = crabCols + 2
+    const fit = strip.length * slot <= cols + 1 ? strip.length : Math.max(1, Math.floor((cols - 4) / slot))
 
     return (
       <Box flexDirection="column">
@@ -1160,18 +1168,15 @@ export const register: Register = (on, options) => {
           </Box>
         )}
         {p.isCompact ? (
-          <Text wrap="truncate-end">
-            {[...running, ...finished].map(a => (
-              <Text key={a.id} color={colorOf(roleOf(a.type))}>
-                {STATUS_GLYPH[a.status]}{' '}
-              </Text>
+          <Box flexDirection="row" gap={1}>
+            {strip.slice(0, fit).map(c => (
+              <Box key={c.key} flexDirection="row">
+                {crabCell(`crab-${c.key}`, c.costume, c.color, c.dim)}
+                {c.isRunning && <Text color={c.color}>●</Text>}
+              </Box>
             ))}
-            {planned.map(pl => (
-              <Text key={`plan-${pl.n}`} dimColor>
-                ◷{' '}
-              </Text>
-            ))}
-          </Text>
+            {strip.length > fit && <Text dimColor>+{strip.length - fit}</Text>}
+          </Box>
         ) : (
           <Box flexDirection="column" marginTop={1}>
             {isEmpty && <Text dimColor>{s.empty}</Text>}
