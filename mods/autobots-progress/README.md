@@ -33,7 +33,7 @@ Each role has its own color and its own crab, dressed for the job. Planned tasks
 | advisor | wears a graduation cap |
 | coding-worker | wears a hard hat and turns a wrench |
 | fast-coding-worker | wears a headband, with speed lines |
-| helper-worker | carries a backpack |
+| helper-worker | holds a flashlight |
 | forensic-analyst | wears a deerstalker and holds a magnifying glass |
 | doc-reviewer | wears reading glasses and holds an open book |
 | reviewer | wears a monocle and holds a red pen |

@@ -509,7 +509,7 @@ const CRAB_CSS = `<style>
 .c-coding-worker.run .it{transform-origin:100% 100%;animation:twist .5s ease-in-out infinite}
 @keyframes twist{50%{transform:rotate(-35deg)}}
 .c-fast-coding-worker.run .la{animation-duration:.25s}.c-fast-coding-worker.run .lb{animation-duration:.25s;animation-delay:-.125s}
-.c-fast-coding-worker.run .star,.c-edge-case-analyst.run .star{animation:blink .5s steps(1) infinite -.25s}
+.c-fast-coding-worker.run .star,.c-edge-case-analyst.run .star,.c-helper-worker.run .star{animation:blink .5s steps(1) infinite -.25s}
 .c-explore.run .it,.c-qa-engineer.run .it{transform-origin:50% 100%;animation:fence .5s ease-in-out infinite}
 @keyframes fence{50%{transform:rotate(25deg)}}
 @media (prefers-reduced-motion: reduce){.run,.run g{animation:none!important}}
@@ -543,11 +543,11 @@ const COSTUMES: Record<string, (f: Fill, t: string) => void> = {
     for (const y of [15, 19]) f(0, y, 2, 1, '#F8F6F1', 'star')
     f(0, 13, 3, 1, '#F8F6F1', 'star'); f(0, 21, 5, 1, '#F8F6F1', 'star')
   },
-  // Helper worker: a big backpack with a bedroll on top.
+  // Helper worker: holds up a flashlight; its beam lights the way ahead and flickers.
   'helper-worker': (f, t) => {
-    crabBody(f)
-    stamp(f, 0, 6, ['.eeeeeee.', 'eeeeeeeee', '.ppppppp.', 'ppppppppp', 'pdddddddp', 'ppppgpppp', 'ppppppppp', 'ppppppppp', 'ppppppppp', 'ppppppppp', 'ppppppppp', 'ppppppppp', '.ppppppp.'], { e: '#C9A66B', p: t, d: '#5A3519', g: '#F5C542' })
-    f(13, 10, 2, 12, '#5A3519')
+    crabBody(f, -4)
+    stamp(f, 19, 5, ['.kk.......', 'ykk.......', 'ykkgggtggg', 'ykkgggtggg', 'ykkgggtggg', 'ykk.......', '.kk.......'], { y: '#FFFBE0', k: '#C9CCD2', g: '#3A3A3C', t })
+    stamp(f, 1, 0, ['ccc...............', 'ccccbbb...........', 'ccccbbbbb.........', 'ccccbbbbbaaa......', 'ccccbbbbbaaaaa....', 'ccccbbbbbaaaaaaaa.', 'ccccbbbbbaaaaaaaaa', 'ccccbbbbbaaaaaaaaa', 'ccccbbbbbaaaaaaaaa', 'ccccbbbbbaaaaaaaaa'], { a: 'rgba(255,230,110,.75)', b: 'rgba(255,230,110,.5)', c: 'rgba(255,230,110,.28)' }, 'star')
   },
   // Forensic analyst: detective with a deerstalker; the magnifier sweeps and glints.
   'forensic-analyst': (f, t) => {
