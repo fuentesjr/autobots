@@ -316,7 +316,6 @@ const ROLE_COLOR: Record<string, string> = {
   reviewer: '#D85A30',
   'edge-case-analyst': '#C2477E',
   'spec-test-writer': '#A88B1A',
-  other: '#888780',
 }
 
 const colorOf = (role: string): string => ROLE_COLOR[role] ?? '#888780'
@@ -670,7 +669,8 @@ const crabImage = (costume: string, dim = false) => {
       }
     }
   }
-  const bytes = Uint8Array.from(buf, (v, i) => Math.round(i % 4 === 3 ? v * 255 * (dim ? DIM : 1) : v))
+  // A dimmed alpha scales the undimmed crab's rounded alpha, so both images agree pixel for pixel.
+  const bytes = Uint8Array.from(buf, (v, i) => (i % 4 === 3 ? Math.round(Math.round(v * 255) * (dim ? DIM : 1)) : Math.round(v)))
   const image = { rgba: btoa(String.fromCharCode(...bytes)), width, height }
   crabImages.set(key, image)
   return image
@@ -758,17 +758,18 @@ ${statusMark(W - 8, 16, 'planned', color)}
   )
 }
 
-const compactSvg = (W: number, list: AgentRun[], planned: Planned[], t: ReturnType<typeof totals>): string => {
+// `runs` comes in the panel's order: running, then finished, each newest first.
+const compactSvg = (W: number, runs: AgentRun[], planned: Planned[], t: ReturnType<typeof totals>): string => {
   const icons = [
-    ...list.filter(a => a.status === 'running').map(a => ({ k: costumeOf(a.type), c: colorOf(roleOf(a.type)), s: 'running', dim: false })),
-    ...list.filter(a => a.status !== 'running').map(a => ({ k: costumeOf(a.type), c: colorOf(roleOf(a.type)), s: a.status, dim: false })),
+    ...runs.map(a => ({ k: costumeOf(a.type), c: colorOf(roleOf(a.type)), s: a.status, dim: false })),
     ...planned.map(p => ({ k: roleOf(p.role), c: colorOf(roleOf(p.role)), s: 'planned', dim: true })),
   ]
   const fit = Math.max(1, Math.floor((W - 150) / 36))
   const shown = icons.slice(0, fit)
   const more = icons.length - shown.length
   const body = shown
-    .map((ic, i) => crab(i * 36, 0, ic.k, ic.dim, ic.s === 'running') + (ic.s === 'running' ? `<circle class="live" cx="${i * 36 + 32}" cy="4" r="3" fill="${ic.c}"/>` : ''))
+    // The running dot sits at the slot's bottom right, beside the legs, where no costume draws.
+    .map((ic, i) => crab(i * 36, 0, ic.k, ic.dim, ic.s === 'running') + (ic.s === 'running' ? `<circle class="live" cx="${i * 36 + 31}" cy="26" r="3" fill="${ic.c}"/>` : ''))
     .join('')
   const x = shown.length * 36 + (more ? 4 : 0)
   return svg(
@@ -1053,7 +1054,7 @@ export const register: Register = (on, options) => {
       if (p.isCompact) {
         return (
           <Box flexDirection="column" gap={1}>
-            <Svg source={compactSvg(W, list, planned, t)} alt={`${list.length} ${s.agentsCount}, ${summary}`} width={W} height={32} />
+            <Svg source={compactSvg(W, [...running, ...finished], planned, t)} alt={`${list.length} ${s.agentsCount}, ${summary}`} width={W} height={32} />
             {toggleCompact}
           </Box>
         )
@@ -1218,10 +1219,10 @@ export const register: Register = (on, options) => {
     const ui = $.ui.resolve(e)
     const { Box, Text, Button } = ui
     const list = await read($, agents)
-    const crew = list.length + plannedOf(f, list).length
+    const crew = `×${list.length + plannedOf(f, list).length}`
     const isWorking = list.some(a => a.status === 'running')
     const crewButton = (
-      <Button key="autobots-agents" label={`×${crew}`} plain onPress={() => void togglePane($)} />
+      <Button key="autobots-agents" label={crew} plain onPress={() => void togglePane($)} />
     )
     const percent = `${Math.round(ratio(f) * 100)}%`
     const dismiss = (
@@ -1251,7 +1252,10 @@ export const register: Register = (on, options) => {
 
     const cols = e.props.bodyColumns
     const titleW = Math.max(8, Math.min(30, f.title.length + 2, Math.floor(cols / 3)))
-    const width = Math.max(6, Math.min(40, cols - titleW - 32))
+    // The bar takes what the row leaves: after it come the label, the percent, ▣, the crew
+    // count and ✕, each one cell per character, with a 2-cell gap before each.
+    const after = [label(f), percent, '▣', crew, '✕'].reduce((w, s) => w + 2 + [...s].length, 0)
+    const width = Math.max(6, Math.min(40, cols - titleW - 2 - after))
     return (
       <Box flexDirection="row" gap={2}>
         <Box width={titleW} flexShrink={0}>

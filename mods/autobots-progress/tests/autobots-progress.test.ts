@@ -253,6 +253,121 @@ describe('progress bar', () => {
   })
 })
 
+// ---------------------------------------------------------------------------
+// The band on the terminal is one line. The kit renders no terminal text, so the width of the row is
+// measured from the tree the mod draws: the display width of every text and button label, plus the
+// gaps, padding and fixed widths of the boxes around them.
+
+type Drawn = string | { type: string; props: Record<string, any>; children?: Drawn[] }
+
+// Cells a character takes on a terminal: 0 for combining marks and joiners, 2 for wide East Asian
+// characters and emoji, 1 otherwise.
+function cells(text: string): number {
+  let n = 0
+  for (const ch of text) {
+    const c = ch.codePointAt(0)!
+    if (/\p{M}/u.test(ch) || c === 0x200d || (c >= 0xfe00 && c <= 0xfe0f)) continue
+    const isWide =
+      (c >= 0x1100 && c <= 0x115f) ||
+      (c >= 0x2e80 && c <= 0xa4cf) ||
+      (c >= 0xac00 && c <= 0xd7a3) ||
+      (c >= 0xf900 && c <= 0xfaff) ||
+      (c >= 0xfe30 && c <= 0xfe6f) ||
+      (c >= 0xff00 && c <= 0xff60) ||
+      (c >= 0xffe0 && c <= 0xffe6) ||
+      (c >= 0x1f300 && c <= 0x1faff) ||
+      (c >= 0x20000 && c <= 0x3fffd)
+    n += isWide ? 2 : 1
+  }
+  return n
+}
+
+// Width in cells and number of lines of a drawn element, `columns` being the width the surface reports.
+// A Box with a numeric width is that wide, whatever it holds; otherwise a row is the sum of its
+// children and the gaps between them, a column the widest child. Margin, padding and a border add.
+function measure(node: Drawn, columns: number): { width: number; lines: number } {
+  if (typeof node === 'string') return { width: cells(node), lines: node.split('\n').length }
+  const { type, props } = node
+  const kids = (node.children ?? []).map(child => measure(child, columns))
+  if (type === 'Button') {
+    // `[ label ]` on the terminal; a plain Button is the label alone (or `<hotkey>: <label>`).
+    const label = String(props.label ?? '')
+    const plain = props.plain ? (props.hotkey ? `${props.hotkey}: ${label}` : label) : `[ ${label} ]`
+    return { width: cells(plain), lines: 1 }
+  }
+  if (type === 'Text') {
+    // Inline content: the strings and nested Texts side by side, broken only by newlines.
+    return { width: kids.reduce((w, k) => w + k.width, 0), lines: kids.reduce((l, k) => l + k.lines - 1, 1) }
+  }
+  if (type !== 'Box') throw new Error(`the band draws an element of type ${type}, whose width this measure does not know`)
+
+  if (props.display === 'none') return { width: 0, lines: 0 }
+  const side = (name: 'Left' | 'Right', base: 'padding' | 'margin'): number =>
+    props[`${base}${name}`] ?? props[`${base}X`] ?? props[base] ?? 0
+  const extra = side('Left', 'padding') + side('Right', 'padding') + side('Left', 'margin') + side('Right', 'margin') + (props.borderStyle ? 2 : 0)
+  const isColumn = props.flexDirection === 'column' || props.flexDirection === 'column-reverse'
+  const shown = kids.filter(k => k.lines > 0)
+  const gap = (isColumn ? props.rowGap : props.columnGap) ?? props.gap ?? 0
+  const natural = isColumn
+    ? Math.max(0, ...shown.map(k => k.width))
+    : shown.reduce((w, k) => w + k.width, 0) + gap * Math.max(0, shown.length - 1)
+  const lines = isColumn
+    ? shown.reduce((l, k) => l + k.lines, 0) + gap * Math.max(0, shown.length - 1)
+    : Math.max(1, ...shown.map(k => k.lines))
+  let fixed: number | undefined
+  if (typeof props.width === 'number') fixed = props.width
+  else if (typeof props.width === 'string') {
+    const pct = /^(\d+(?:\.\d+)?)%$/.exec(props.width)
+    if (!pct) throw new Error(`the band draws a Box of width ${props.width}, which this measure does not know`)
+    fixed = Math.floor((columns * Number(pct[1])) / 100)
+  }
+  return { width: (fixed ?? natural) + (fixed === undefined ? extra : 0), lines }
+}
+
+describe('progress band on the terminal', () => {
+  // Mounts the band on the terminal at `bodyColumns` wide and measures the row it draws.
+  async function bandAt($: Engine, bodyColumns: number) {
+    const ui = await $.ui.mount({
+      plugin: 'autobots-progress',
+      surface: 'terminal',
+      component: 'AbovePrompt',
+      props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns, scroll: { offset: 0, bodyRows: 10 }, view: {} },
+    })
+    const tree = (await ui.drawn()) as Drawn
+    await ui.unmount()
+    const drawsBar = typeof tree !== 'string' && tree.props.key !== ENGINE_BAND
+    return { tree, drawsBar, ...measure(tree, bodyColumns) }
+  }
+
+  const LONG_TITLE = 'Migrate the billing service to the new payment provider'
+  const crew = (n: number) => Array.from({ length: n }, (_, i) => ({ title: `Task ${i + 1}`, role: 'coding-worker' }))
+  // The band states the row must fit in, each as the progress tool call that makes it.
+  const STATES: Record<string, Record<string, unknown>> = {
+    'a running flow with a reported phase': { title: 'Ship the thing', total: 3, done: 1, phase: 'review' },
+    'a flow with accepted tasks, 0 of 3': { title: 'Ship the thing', total: 3, done: 0, phase: 'delegate' },
+    'a finished flow, Done, 100%': { title: 'Ship the thing', total: 3, done: 3, phase: 'review', finished: true },
+    'a title of 40 or more characters': { title: LONG_TITLE, total: 3, done: 0, phase: 'delegate' },
+    'a 10 of 12 count with a crew of 12': { title: 'Ship the thing', total: 12, done: 10, phase: 'review', tasks: crew(12) },
+    // The widest label (Review 12/12) with the widest percent (100%) and a two-digit crew count, before the flow is closed.
+    'a 12 of 12 count at 100% with a crew of 12, not yet finished': { title: 'Ship the thing', total: 12, done: 12, phase: 'review', tasks: crew(12) },
+    'a long title with a 10 of 12 count and a crew of 12': { title: LONG_TITLE, total: 12, done: 10, phase: 'review', tasks: crew(12) },
+  }
+
+  for (const [state, call] of Object.entries(STATES)) {
+    for (const columns of [60, 80, 82, 83, 100, 120]) {
+      test(`the band for ${state} fits on one line in ${columns} columns`, async ($, on) => {
+        await boot($, on)
+        await $.tool.call({ tool: PROGRESS_TOOL, ...call } as never)
+
+        const band = await bandAt($, columns)
+        expect(band.drawsBar, 'the mod draws the band on the terminal').toBe(true)
+        expect(band.lines, 'the band is one line').toBe(1)
+        expect(band.width, `the band is at most ${columns} cells wide`).toBeLessThanOrEqual(columns)
+      })
+    }
+  }
+})
+
 const PLAN = [
   { title: 'Write the specs', role: 'spec-test-writer' },
   { title: 'Make them pass', role: 'coding-worker', after: [1] },
@@ -928,7 +1043,7 @@ describe('terminal agents panel matches the desktop', () => {
   const imagesOf = (els: Found[]): Found[] => els.filter(el => el.type === 'Image')
 
   // Descriptions that no other text of the panel contains, one per subagent.
-  const TITLES = ['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot', 'golf', 'hotel', 'india', 'juliet', 'kilo', 'lima']
+  const TITLES = ['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot', 'golf', 'hotel', 'india', 'juliet', 'kilo', 'lima', 'mike', 'november']
 
   // A row is a crab Image and the texts that follow it, up to the next crab.
   type Row = { image: Found; texts: string[] }
@@ -973,7 +1088,7 @@ describe('terminal agents panel matches the desktop', () => {
     expect(textsOf(els).filter(t => t.includes('▣')), 'no ▣ glyph drawn as text').toEqual([])
   })
 
-  test('every crab Image has the alt text ▣', async ($, on) => {
+  test('every crab Image of a running or finished subagent has the alt text ▣ (planned rows use ▢)', async ($, on) => {
     const w = await stage($, on)
     await spawnSubagent($, 'coding-worker', 'alpha')
     await spawnSubagent($, 'reviewer', 'bravo')
@@ -996,6 +1111,14 @@ describe('terminal agents panel matches the desktop', () => {
       for (const b of ALL_TYPES.slice(i + 1)) if (crabs[a] === crabs[b]) sharing.push(`${a} and ${b}`)
     }
     expect(sharing, 'pairs of types that wear the same crab').toEqual([])
+  })
+
+  test('a subagent of a type that is neither a roster role nor Explore draws one plain crab, distinct from the 12 role and Explore crabs', async ($, on) => {
+    const OTHER = ['general-purpose', 'claude']
+    const crabs = await crabsOf($, on, [...ALL_TYPES, ...OTHER])
+    expect(crabs['claude'], 'two different non-roster types draw the same plain crab').toBe(crabs['general-purpose'])
+    const sharing = ALL_TYPES.filter(type => crabs[type] === crabs['general-purpose'])
+    expect(sharing, 'role and Explore types that wear the plain crab').toEqual([])
   })
 
   test('two running subagents of the same type, with different titles, draw the same crab', async ($, on) => {
@@ -1057,6 +1180,46 @@ describe('terminal agents panel matches the desktop', () => {
       expect(planned?.props.alt, `the planned row of ${role} has a ▢ crab, not a ▣ one`).toBe('▢')
       expect(running?.props.alt, `the running row of ${role} is running`).toBe('▣')
       expect(JSON.stringify(planned?.props.source) === JSON.stringify(running?.props.source), `planned and running ${role} wear different crabs`).toBe(false)
+    }
+  })
+
+  // The pixels of an Image source: straight RGBA, base64, row by row.
+  const pixelsOf = (source: unknown): { width: number; height: number; bytes: number[] } => {
+    const { rgba, width, height } = source as { rgba: string; width: number; height: number }
+    return { width, height, bytes: [...atob(rgba)].map(ch => ch.charCodeAt(0)) }
+  }
+
+  // The planned-row opacity of the desktop, applied to the crab as a whole.
+  const PLANNED_OPACITY = 0.45
+
+  test('a planned task\'s crab is the pixels of a running subagent\'s crab of the same role, each alpha being round(alpha x 0.45)', async ($, on) => {
+    const w = await stage($, on)
+    await plan($)
+    // Different descriptions from the planned titles: these runs are not the planned tasks.
+    for (const { role } of PLANNED) await spawnSubagent($, role, `run/${role}`)
+
+    const rows = rowsOf(await w.elements('terminal'))
+    const crabOf = (title: string) => rows.find(r => r.texts.some(t => t.includes(title)))?.image
+    for (const { role } of PLANNED) {
+      const planned = crabOf(`plan/${role}`)
+      const running = crabOf(`run/${role}`)
+      expect(planned, `a crab Image is drawn in the planned row of ${role}`).toBeDefined()
+      expect(running, `a crab Image is drawn in the running row of ${role}`).toBeDefined()
+      const dim = pixelsOf(planned?.props.source)
+      const full = pixelsOf(running?.props.source)
+      expect([dim.width, dim.height], `the planned and running ${role} crabs are the same size`).toEqual([full.width, full.height])
+      expect(dim.bytes, `the planned ${role} crab has 4 bytes for each of its pixels`).toHaveLength(dim.width * dim.height * 4)
+      expect(full.bytes, `the running ${role} crab has 4 bytes for each of its pixels`).toHaveLength(full.width * full.height * 4)
+
+      // Expected from the running crab's own pixels: the same RGB, the alpha scaled by 0.45 and rounded.
+      const expected = full.bytes.map((v, i) => (i % 4 === 3 ? Math.round(v * PLANNED_OPACITY) : v))
+      const wrong: string[] = []
+      for (let i = 0; i < expected.length; i += 4) {
+        if ([0, 1, 2, 3].some(k => dim.bytes[i + k] !== expected[i + k])) {
+          wrong.push(`pixel ${i / 4}: planned rgba(${dim.bytes.slice(i, i + 4)}), expected rgba(${expected.slice(i, i + 4)}) from running rgba(${full.bytes.slice(i, i + 4)})`)
+        }
+      }
+      expect(wrong.slice(0, 5), `${wrong.length} pixels of the planned ${role} crab differ from the running crab dimmed to 0.45`).toEqual([])
     }
   })
 
@@ -1286,6 +1449,83 @@ describe('terminal agents panel matches the desktop', () => {
     const strip = stripOf(crew, els)
     expect(strip.length, 'the strip draws crabs').toBeGreaterThanOrEqual(1)
     expect(count(textsOf(els), '●'), 'one ● for each running subagent shown').toBe(strip.filter(i => i.group === 'running').length)
+  })
+
+  // ----- 7b. the order of the strip, the width it uses, and where the ● sits
+
+  // Five types of their own for the strip order: three running, two finished (each finished in the order it
+  // was started, so "newest started" and "newest finished" are the same subagent), two planned.
+  const ORDERED = {
+    running: ['planner', 'coding-worker', 'reviewer'],
+    finished: ['advisor', 'qa-engineer'],
+    planned: ['edge-case-analyst', 'doc-reviewer'],
+  }
+  // buildCrew starts the finished ones first (titles delta, echo), then the running (alpha, bravo, charlie), in the
+  // order given. The strip: running newest started first, finished newest first, planned in plan order.
+  const STRIP_ORDER = ['charlie', 'bravo', 'alpha', 'echo', 'delta', 'plan/edge-case-analyst', 'plan/doc-reviewer']
+  const COSTUME_ORDER = ['reviewer', 'coding-worker', 'planner', 'qa-engineer', 'advisor', 'edge-case-analyst', 'doc-reviewer']
+
+  test('on the terminal the Collapse strip shows running subagents newest started first, then finished newest first, then planned in plan order', async ($, on) => {
+    const crew = await buildCrew($, on, 200, ORDERED)
+    await crew.w.toggle(200)
+
+    const strip = stripOf(crew, await crew.w.elements('terminal', 200))
+    expect(strip.map(i => i.title)).toEqual(STRIP_ORDER)
+  })
+
+  test('on the desktop the Collapse strip shows running subagents newest started first, then finished newest first, then planned in plan order', async ($, on) => {
+    const crew = await buildCrew($, on, 200, ORDERED)
+    await crew.w.toggle(200)
+
+    // The strip is one drawing; its source names the crabs' costumes (c-<costume>) in the order they are drawn.
+    const drawings = (await crew.w.elements('desktop', 200)).filter(el => el.type === 'Svg')
+    expect(drawings, 'the collapsed desktop panel draws its strip as one Svg').toHaveLength(1)
+    const costumes = [...String(drawings[0]!.props.source).matchAll(/class="c-([a-z-]+)/g)].map(m => m[1])
+    expect(costumes).toEqual(COSTUME_ORDER)
+  })
+
+  test('at 40 bodyColumns with 12 subagents the Collapse strip shows at least 3 crabs, and at 80 it shows more crabs and a smaller +N', async ($, on) => {
+    const crew = await buildCrew($, on, 40, MANY)
+    await crew.w.toggle(40)
+
+    const narrow = await crew.w.elements('terminal', 40)
+    const wide = await crew.w.elements('terminal', 80)
+    const shownNarrow = imagesOf(narrow).length
+    const shownWide = imagesOf(wide).length
+    const moreNarrow = moreOf(narrow).reduce((a, b) => a + b, 0)
+    const moreWide = moreOf(wide).reduce((a, b) => a + b, 0)
+    expect(shownNarrow, 'at least 3 of the 12 crabs fit 40 columns').toBeGreaterThanOrEqual(3)
+    expect(shownNarrow + moreNarrow, 'shown and +N make the 12 at 40 columns').toBe(12)
+    expect(shownWide + moreWide, 'shown and +N make the 12 at 80 columns').toBe(12)
+    expect(shownWide, 'at 80 columns at least as many crabs are shown as at 40').toBeGreaterThanOrEqual(shownNarrow)
+    expect(moreWide, 'at 80 columns +N is smaller than at 40').toBeLessThan(moreNarrow)
+  })
+
+  // The element right after a crab Image, in document order, is a Text ● exactly when the crab is a running subagent's.
+  const expectMarksNextToRunningCrabs = (crew: Crew, els: Found[], when: string) => {
+    let crabs = 0
+    for (const [i, el] of els.entries()) {
+      if (el.type !== 'Image') continue
+      crabs++
+      const item = crew.groupOf.get(JSON.stringify(el.props.source))
+      expect(item, `the crab at position ${crabs} is an item's crab (${when})`).toBeDefined()
+      const next = els[i + 1]
+      const isMark = next?.type === 'Text' && next.text.trim() === '●'
+      expect(isMark, `${item?.title} (${item?.group}): the element right after its crab is ${item?.group === 'running' ? 'a' : 'not a'} Text ● (${when})`).toBe(item?.group === 'running')
+    }
+    expect(crabs, `the strip draws crabs (${when})`).toBeGreaterThanOrEqual(1)
+  }
+
+  test('in the Collapse strip the element right after each running subagent\'s crab is a Text ●, and after no other crab', async ($, on) => {
+    const crew = await buildCrew($, on, 200, WIDE)
+    await crew.w.toggle(200)
+    expectMarksNextToRunningCrabs(crew, await crew.w.elements('terminal', 200), 'all crabs fit')
+  })
+
+  test('in a cut-short Collapse strip the element right after each running subagent\'s crab is a Text ●, and after no other crab', async ($, on) => {
+    const crew = await buildCrew($, on, 40, MANY)
+    await crew.w.toggle(40)
+    expectMarksNextToRunningCrabs(crew, await crew.w.elements('terminal', 40), 'cut short')
   })
 
   // ----- 8. the rest of Collapse mode on the terminal
