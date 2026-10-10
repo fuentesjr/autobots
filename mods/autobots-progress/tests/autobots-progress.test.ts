@@ -220,6 +220,24 @@ describe('progress bar', () => {
     expect(showsTitle(await barStrings($), 'Ship the thing')).toBe(true)
   })
 
+  // The terminal's element table lists Svg but draws nothing for it, so a band
+  // drawn as Svg there showed only its buttons (seen live in Ghostty, 2026-10-10).
+  test('on the terminal the bar shows its title, status and percent as text, not as a drawing', async ($, on) => {
+    await boot($, on)
+    await $.tool.call({ tool: PROGRESS_TOOL, title: 'Ship the thing', total: 2, phase: 'delegate' } as never)
+
+    const ui = await mountBand($, 'terminal')
+    const elements = await ui.findAll({})
+    await ui.unmount()
+
+    expect(elements.filter(el => el.type === 'Svg'), 'no Svg in the terminal band').toEqual([])
+    const texts = elements.filter(el => el.type === 'Text').map(el => el.text)
+    expect(texts.some(t => t.includes('Ship the thing')), 'the title is visible text').toBe(true)
+    // The delegate phase reads as task progress, as the progress tool answers it.
+    expect(texts.some(t => t.includes('Tasks 0/2')), 'the status is visible text').toBe(true)
+    expect(texts.some(t => t.includes('0%')), 'the percent is visible text').toBe(true)
+  })
+
   test('a bar triggered by a roster subagent with no reported title is titled autobots', async ($, on) => {
     await boot($, on)
     await spawnSubagent($, 'planner')
