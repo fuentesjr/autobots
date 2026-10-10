@@ -591,23 +591,79 @@ const COSTUMES: Record<string, (f: Fill, t: string) => void> = {
 // What a crab is drawn as: a role, `explore`, or `other`.
 const costumeOf = (type: string): string => (type === 'Explore' ? 'explore' : roleOf(type))
 
+// The COSTUMES entry a crab wears: its group's, or one of its own keyed by its name.
+// A role gets its own costume by adding it to COSTUMES under the role's name and
+// dropping the role from ROLE_COSTUME; both surfaces follow.
+const kindOf = (costume: string): string => ROLE_COSTUME[costume] ?? costume
+
 const CRAB_SCALE = 1.1
+
+type Rect = [x: number, y: number, w: number, h: number, c: string]
+
+// A costume's pixels by group, in paint order: the body (`bd`) first, then each
+// prop, then the leg pairs `la` and `lb`. Both the SVG crab and the terminal's
+// image are painted from this.
+const crabRects = (kind: string, accent: string): [string, Rect[]][] => {
+  const groups = new Map<string, Rect[]>([['bd', []]])
+  const f: Fill = (x, y, w, h, c, cls = 'bd') => {
+    if (!groups.has(cls)) groups.set(cls, [])
+    groups.get(cls)?.push([x, y, w, h, c])
+  }
+  const draw = COSTUMES[kind] ?? ((g: Fill) => crabBody(g))
+  draw(f, accent)
+  const legs = ['la', 'lb']
+  return [...[...groups].filter(([cls]) => !legs.includes(cls)), ...legs.map((cls): [string, Rect[]] => [cls, groups.get(cls) ?? []])]
+}
 
 // Body and props nest inside `bd` so a prop rides the bob and adds its own motion;
 // legs stay outside it and step on their own.
 const crab = (x: number, y: number, costume: string, dim = false, isWalking = false, scale = CRAB_SCALE): string => {
-  const groups = new Map<string, string[]>([['bd', []]])
-  const f: Fill = (cx, cy, w, h, c, cls = 'bd') => {
-    if (!groups.has(cls)) groups.set(cls, [])
-    groups.get(cls)?.push(`<rect x="${cx}" y="${cy}" width="${w}" height="${h}" fill="${c}"/>`)
+  const kind = kindOf(costume)
+  const groups = crabRects(kind, colorOf(costume))
+  const rects = (list: Rect[]) => list.map(([cx, cy, w, h, c]) => `<rect x="${cx}" y="${cy}" width="${w}" height="${h}" fill="${c}"/>`).join('')
+  const group = ([cls, list]: [string, Rect[]]) => `<g class="${cls}">${rects(list)}</g>`
+  const [[, bd = []] = [], ...props] = groups.slice(0, -2)
+  const body = `<g class="bd">${rects(bd)}${props.map(group).join('')}</g>`
+  return `<g transform="translate(${x},${y}) scale(${scale})" opacity="${dim ? 0.45 : 1}" shape-rendering="crispEdges"><g class="c-${kind}${isWalking ? ' run' : ''}">${body}${groups.slice(-2).map(group).join('')}</g></g>`
+}
+
+// The terminal's crab: the same pixels as an RGBA image of the 30×28 grid, still.
+// One per costume, not per role, so a costume's accent is its first role's color.
+const CRAB_GRID = { width: 30, height: 28 }
+const crabImages = new Map<string, { rgba: string; width: number; height: number }>()
+
+const rgbaOf = (c: string): number[] => {
+  const m = /^rgba\(([\d.]+),([\d.]+),([\d.]+),([\d.]+)\)$/.exec(c)
+  if (m) return m.slice(1).map(Number)
+  const hex = c.length === 4 ? [...c.slice(1)].map(d => d + d).join('') : c.slice(1)
+  return [0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16)).concat(1)
+}
+
+const crabImage = (kind: string) => {
+  const cached = crabImages.get(kind)
+  if (cached) return cached
+  const { width, height } = CRAB_GRID
+  const buf = new Float64Array(width * height * 4) // straight RGB 0-255, alpha 0-1
+  const accent = colorOf(Object.keys(ROLE_COSTUME).find(r => ROLE_COSTUME[r] === kind) ?? kind)
+  for (const [, list] of crabRects(kind, accent)) {
+    for (const [x, y, w, h, c] of list) {
+      const [r = 0, g = 0, b = 0, a = 1] = rgbaOf(c)
+      for (let row = Math.max(0, y); row < Math.min(height, y + h); row++) {
+        for (let col = Math.max(0, x); col < Math.min(width, x + w); col++) {
+          // Source over, as the SVG paints a translucent rect over what lies beneath.
+          const i = (row * width + col) * 4
+          const da = (buf[i + 3] ?? 0) * (1 - a)
+          const oa = a + da
+          ;[r, g, b].forEach((v, k) => (buf[i + k] = (v * a + (buf[i + k] ?? 0) * da) / oa))
+          buf[i + 3] = oa
+        }
+      }
+    }
   }
-  const kind = ROLE_COSTUME[costume] ?? costume
-  const draw = COSTUMES[kind] ?? ((g: Fill) => crabBody(g))
-  draw(f, colorOf(costume))
-  const group = (cls: string) => `<g class="${cls}">${(groups.get(cls) ?? []).join('')}</g>`
-  const props = [...groups.keys()].filter(k => k !== 'bd' && k !== 'la' && k !== 'lb')
-  const body = `<g class="bd">${(groups.get('bd') ?? []).join('')}${props.map(group).join('')}</g>`
-  return `<g transform="translate(${x},${y}) scale(${scale})" opacity="${dim ? 0.45 : 1}" shape-rendering="crispEdges"><g class="c-${kind}${isWalking ? ' run' : ''}">${body}${group('la')}${group('lb')}</g></g>`
+  const bytes = Uint8Array.from(buf, (v, i) => Math.round(i % 4 === 3 ? v * 255 : v))
+  const image = { rgba: btoa(String.fromCharCode(...bytes)), width, height }
+  crabImages.set(kind, image)
+  return image
 }
 
 const statusMark = (x: number, y: number, status: string, color: string): string => {
@@ -1014,9 +1070,18 @@ export const register: Register = (on, options) => {
       )
     }
 
-    // Terminal: the same content in text rows.
+    // Terminal: the desktop's layout in cells, the crab as a still image of the same pixels.
     const cols = Math.max(24, e.props.bodyColumns || 40)
-    const barW = Math.max(6, Math.min(20, cols - 34))
+    // The crab spans three rows; six columns keep it about square in a 1:2 cell.
+    const crabCols = 6
+    const barW = Math.max(6, cols - crabCols - 2)
+    const rule = <Text dimColor wrap="truncate-end">{'─'.repeat(cols)}</Text>
+    const crabCell = (key: string, costume: string, color: string) =>
+      'Image' in ui ? (
+        <ui.Image key={key} source={crabImage(kindOf(costume))} columns={crabCols} rows={3} alt="▣" />
+      ) : (
+        <Text color={color}>▣</Text>
+      )
     const row = (a: AgentRun) => {
       const role = roleOf(a.type)
       const color = colorOf(role)
@@ -1025,31 +1090,43 @@ export const register: Register = (on, options) => {
       const model = a.effort ? `${modelName(a.model)} · ${a.effort}` : modelName(a.model)
       const activity = activityOf(a, at)
       return (
-        <Box key={a.id} flexDirection="column" marginBottom={1}>
+        <Box key={a.id} flexDirection="column">
           <Box flexDirection="row" gap={1}>
-            <Text color={color}>▣</Text>
-            <Text bold wrap="truncate-end">
-              {a.description || a.type}
-            </Text>
-            <Text color={a.status === 'failed' ? 'red' : a.status === 'done' ? 'green' : color}>{STATUS_GLYPH[a.status]}</Text>
+            {crabCell(`crab-${a.id}`, costumeOf(a.type), color)}
+            <Box flexDirection="column" flexGrow={1}>
+              <Box flexDirection="row" justifyContent="space-between" gap={1}>
+                <Text bold wrap="truncate-end">
+                  {a.description || a.type}
+                </Text>
+                <Text color={a.status === 'failed' ? 'red' : a.status === 'done' ? 'green' : color}>{STATUS_GLYPH[a.status]}</Text>
+              </Box>
+              <Text wrap="truncate-end">
+                <Text color={color}>{role === 'other' ? a.type : role}</Text>
+                <Text dimColor>
+                  {'  '}
+                  {model}
+                  {a.round > 1 ? ` · ${s.round} ${a.round}` : ''}
+                </Text>
+              </Text>
+              <Box flexDirection="row" justifyContent="space-between" gap={2}>
+                <Text wrap="truncate-end">{activity}</Text>
+                <Text dimColor>
+                  ctx {ctx}% · {fmtTokens(a.contextTokens)} ≈{fmtCost(a.costUsd)} {fmtTime(elapsed(a, at))}
+                </Text>
+              </Box>
+              {progress === null ? <Text dimColor>{ctxBar(ctx, barW)}</Text> : <Text color={color}>{ctxBar(progress * 100, barW)}</Text>}
+            </Box>
           </Box>
-          <Text dimColor wrap="truncate-end">
-            {'  '}
-            {role === 'other' ? a.type : role} · {model}
-            {a.round > 1 ? ` · ${s.round} ${a.round}` : ''}
-          </Text>
-          <Text wrap="truncate-end">
-            {'  '}
-            {progress === null ? <Text dimColor>{ctxBar(ctx, barW)}</Text> : <Text color={color}>{ctxBar(progress * 100, barW)}</Text>}
-            <Text dimColor>
-              {' '}
-              ctx {ctx}% · {fmtTokens(a.contextTokens)} ≈{fmtCost(a.costUsd)} {fmtTime(elapsed(a, at))}
-              {activity ? ` · ${activity}` : ''}
-            </Text>
-          </Text>
+          {rule}
         </Box>
       )
     }
+    const tile = (label: string, value: string) => (
+      <Box key={label} flexDirection="column" flexGrow={1} borderStyle="round" borderDimColor paddingX={1}>
+        <Text dimColor>{label}</Text>
+        <Text bold>{value}</Text>
+      </Box>
+    )
 
     return (
       <Box flexDirection="column">
@@ -1059,9 +1136,17 @@ export const register: Register = (on, options) => {
           </Text>
           {toggleCompact}
         </Box>
-        <Text dimColor>
-          ≈{fmtCost(t.cost)} · {fmtTokens(t.tokens)} {s.tokensWord} · {fmtTime(t.time)}
-        </Text>
+        {p.isCompact || cols < 42 ? (
+          <Text dimColor>
+            ≈{fmtCost(t.cost)} · {fmtTokens(t.tokens)} {s.tokensWord} · {fmtTime(t.time)}
+          </Text>
+        ) : (
+          <Box flexDirection="row" gap={1}>
+            {tile(s.cost, `≈${fmtCost(t.cost)}`)}
+            {tile(s.tokens, fmtTokens(t.tokens))}
+            {tile(s.time, fmtTime(t.time))}
+          </Box>
+        )}
         {p.isCompact ? (
           <Text wrap="truncate-end">
             {[...running, ...finished].map(a => (

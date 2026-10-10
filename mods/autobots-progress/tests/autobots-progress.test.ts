@@ -848,3 +848,211 @@ describe('agent activity in the agents panel', () => {
     }
   })
 })
+
+// The owner wants the terminal agents panel to look as close as possible to the desktop one: the
+// crab per row, the three stat tiles, a status mark per row. These tests read the panel on the
+// terminal; the desktop is read only as the reference for what the terminal must also show.
+describe('terminal agents panel matches the desktop', () => {
+  type Found = Awaited<ReturnType<Awaited<ReturnType<Engine['ui']['mount']>>['findAll']>>[number]
+
+  // The test is the model API beneath the mod: every model request reports `tokens`, and the end
+  // of a subagent's run is answered. Hooks beneath the plugins are registered before the session starts.
+  async function stage($: Engine, on: On) {
+    const usage = { input_tokens: 100_000, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, model: 'claude-sonnet-5-5' }
+    on('turn.step', async function* (_$, e) {
+      yield { kind: 'stop' as const, stopReason: 'end_turn' as const, usage }
+      return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn' as const, usage }
+    })
+    on('turn.complete', async (_$, e) => ({ text: e.answer }))
+    on('classic.SubagentStop', async () => ({}))
+    const h = await boot($, on)
+
+    let index = 0
+    return {
+      h,
+      // The subagent makes one model request.
+      async work(type: string): Promise<void> {
+        const step = $.turn.step({ turnId: 'turn-1', index: index++, model: 'claude-sonnet-5-5', messageCount: 3, agentId: `agent-${type}` })
+        for await (const _chunk of step) {
+          // drain the stream
+        }
+        await step.result
+      },
+      // The end of the subagent's run, as the engine raises it.
+      async finish(type: string): Promise<void> {
+        await $.turn.complete({ reason: 'answer', answer: 'done', durationMs: 1, isAborted: false, turnId: 'turn-1', agentId: `agent-${type}` })
+        await $.classic.SubagentStop({ stop_hook_active: false, agent_id: `agent-${type}`, agent_transcript_path: '', agent_type: type })
+      },
+      // Every element the open panel draws on a surface, in document order.
+      async elements(surface: 'terminal' | 'desktop'): Promise<Found[]> {
+        if (h.openedPanes.length === 0) await $.command.run({ command: 'agents-info', args: '' } as never)
+        expect(h.openedPanes.length, 'the agents panel is open').toBeGreaterThan(0)
+        const pane = await $.ui.mount({
+          plugin: 'autobots-progress',
+          surface,
+          component: 'Pane',
+          requestId: h.openedPanes[0],
+          props: { title: 'Agents', isFocused: false, bodyColumns: 100, placement: 'inline', scroll: { offset: 0, bodyRows: 30 }, view: {} },
+        })
+        const found = await pane.findAll({})
+        await pane.unmount()
+        return found
+      },
+    }
+  }
+
+  const textsOf = (els: Found[]): string[] => els.filter(el => el.type === 'Text').map(el => el.text)
+  const imagesOf = (els: Found[]): Found[] => els.filter(el => el.type === 'Image')
+
+  // Descriptions that no other text of the panel contains, one per subagent.
+  const TITLES = ['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot', 'golf', 'hotel', 'india', 'juliet', 'kilo']
+
+  // Spawns one running subagent per type, titled alpha, bravo, ..., and returns the crab each row
+  // draws, by type. A row is the crab Image and the texts that follow it, up to the next crab.
+  async function crabsOf($: Engine, on: On, types: string[]): Promise<Record<string, string>> {
+    const w = await stage($, on)
+    await $.command.run({ command: 'agents-info', args: '' } as never)
+    for (const [i, type] of types.entries()) await spawnSubagent($, type, TITLES[i])
+    const els = await w.elements('terminal')
+
+    const rows: { image: Found; texts: string[] }[] = []
+    for (const el of els) {
+      if (el.type === 'Image') rows.push({ image: el, texts: [] })
+      else if (rows.length > 0 && el.type === 'Text') rows.at(-1)?.texts.push(el.text)
+    }
+    const crabs: Record<string, string> = {}
+    for (const [i, type] of types.entries()) {
+      const row = rows.find(r => r.texts.some(t => t.includes(TITLES[i]!)))
+      expect(row, `a crab Image is drawn in the row of the ${type} subagent`).toBeDefined()
+      crabs[type] = JSON.stringify(row?.image.props.source)
+      expect(crabs[type], `the crab of the ${type} subagent has a source`).not.toBe(undefined)
+    }
+    return crabs
+  }
+
+  // ----- 1 and 2. the crab
+
+  test('each subagent row, running or finished, shows a crab as an Image instead of the ▣ glyph', async ($, on) => {
+    const w = await stage($, on)
+    await spawnSubagent($, 'coding-worker', 'alpha')
+    await spawnSubagent($, 'reviewer', 'bravo')
+    await w.finish('reviewer')
+
+    const els = await w.elements('terminal')
+    expect(imagesOf(els), 'one crab Image for the running row and one for the finished row').toHaveLength(2)
+    expect(textsOf(els).filter(t => t.includes('▣')), 'no ▣ glyph drawn as text').toEqual([])
+  })
+
+  test('every crab Image has the alt text ▣', async ($, on) => {
+    const w = await stage($, on)
+    await spawnSubagent($, 'coding-worker', 'alpha')
+    await spawnSubagent($, 'reviewer', 'bravo')
+    await w.finish('reviewer')
+
+    const images = imagesOf(await w.elements('terminal'))
+    expect(images, 'the rows draw crab Images').toHaveLength(2)
+    expect(images.map(el => el.props.alt)).toEqual(['▣', '▣'])
+  })
+
+  // ----- 3. the costume follows the role, grouped as on the desktop
+
+  const SAME_GROUP: Record<string, string[]> = {
+    fable: ['planner', 'advisor'],
+    heavy: ['helper-worker', 'forensic-analyst', 'edge-case-analyst', 'reviewer', 'doc-reviewer'],
+    careful: ['coding-worker', 'qa-engineer'],
+  }
+  for (const [group, roles] of Object.entries(SAME_GROUP)) {
+    test(`the ${group} roles (${roles.join(', ')}) draw identical crabs`, async ($, on) => {
+      const crabs = await crabsOf($, on, roles)
+      for (const role of roles.slice(1)) expect(crabs[role], `${role} wears the same crab as ${roles[0]}`).toBe(crabs[roles[0]!])
+    })
+  }
+
+  // One role from each group; Explore is the non-roster type.
+  const REPRESENTATIVES = ['planner', 'reviewer', 'coding-worker', 'spec-test-writer', 'fast-coding-worker']
+
+  test('roles from different groups (fable, heavy, careful, medium, light) draw different crabs', async ($, on) => {
+    const crabs = await crabsOf($, on, REPRESENTATIVES)
+    for (const [i, a] of REPRESENTATIVES.entries()) {
+      for (const b of REPRESENTATIVES.slice(i + 1)) expect(crabs[a], `${a} and ${b} wear different crabs`).not.toBe(crabs[b])
+    }
+  })
+
+  test('the Explore subagent draws a crab different from each roster group', async ($, on) => {
+    const crabs = await crabsOf($, on, [...REPRESENTATIVES, 'Explore'])
+    for (const role of REPRESENTATIVES) expect(crabs.Explore, `Explore and ${role} wear different crabs`).not.toBe(crabs[role])
+  })
+
+  // ----- 4. the stat tiles
+
+  test('the panel shows tiles labeled Cost, Tokens and Time, each with its value', async ($, on) => {
+    const w = await stage($, on)
+    await spawnSubagent($, 'coding-worker', 'alpha')
+    await w.work('coding-worker')
+    await w.h.clock.advance(47_000)
+
+    const texts = textsOf(await w.elements('terminal'))
+    const shown = (re: RegExp) => texts.some(t => re.test(t))
+    // Labels are capitalized words of their own; the value formats are the panel's: ≈$0.28, 293k, 0:47.
+    expect(shown(/\bCost\b/), 'the Cost label').toBe(true)
+    expect(shown(/\bTokens\b/), 'the Tokens label').toBe(true)
+    expect(shown(/\bTime\b/), 'the Time label').toBe(true)
+    expect(shown(/≈\$\d+\.\d{1,2}/), 'a cost value').toBe(true)
+    expect(shown(/\b\d+(\.\d)?[kM]\b/), 'a tokens value').toBe(true)
+    expect(shown(/\b\d+:\d{2}\b/), 'a time value').toBe(true)
+  })
+
+  // ----- 5. the status mark
+
+  // Running and finished rows side by side. A row's texts run from its title to the next row's title.
+  async function markedRows($: Engine, on: On): Promise<Record<string, string[]>> {
+    const w = await stage($, on)
+    await spawnSubagent($, 'coding-worker', 'alpha')
+    await spawnSubagent($, 'reviewer', 'bravo')
+    await w.finish('reviewer')
+
+    const rows: Record<string, string[]> = {}
+    let current: string[] | undefined
+    for (const t of textsOf(await w.elements('terminal'))) {
+      if (t === 'alpha' || t === 'bravo') current = rows[t] = []
+      else current?.push(t)
+    }
+    expect(Object.keys(rows).sort(), 'both rows are drawn, titled by their descriptions').toEqual(['alpha', 'bravo'])
+    return rows
+  }
+
+  test('a running subagent row ends with ● and shows no ✓', async ($, on) => {
+    const rows = await markedRows($, on)
+    expect(rows.alpha!.some(t => t.includes('●')), 'the running row shows ●').toBe(true)
+    expect(rows.alpha!.some(t => t.includes('✓')), 'the running row shows no ✓').toBe(false)
+  })
+
+  test('a finished subagent row ends with ✓ and shows no ●', async ($, on) => {
+    const rows = await markedRows($, on)
+    expect(rows.bravo!.some(t => t.includes('✓')), 'the finished row shows ✓').toBe(true)
+    expect(rows.bravo!.some(t => t.includes('●')), 'the finished row shows no ●').toBe(false)
+  })
+
+  // ----- 6. parity with the desktop
+
+  test('every agent title and role name the desktop panel shows is also shown as text on the terminal', async ($, on) => {
+    const w = await stage($, on)
+    await $.tool.call({ tool: PROGRESS_TOOL, title: 'Build it', total: 2, phase: 'delegate', tasks: PLAN } as never)
+    await spawnSubagent($, 'planner', 'Sketch the design')
+    await spawnSubagent($, 'reviewer', 'Check the diff')
+    await w.finish('reviewer')
+    await spawnSubagent($, 'Explore', 'Scan the repository')
+
+    // What the desktop shows is its text and the alt of its drawings; the kit does not expose the
+    // pixels or markup, so the role names it draws are the roles of the state built above.
+    const desktop = (await w.elements('desktop')).flatMap(el => [el.text, typeof el.props.alt === 'string' ? el.props.alt : ''])
+    const titles = ['Sketch the design', 'Check the diff', 'Scan the repository', ...PLAN.map(t => t.title)]
+    const roles = ['planner', 'reviewer', 'Explore', ...PLAN.map(t => t.role)]
+    for (const title of titles) expect(desktop.some(s => s.includes(title)), `the desktop shows the title ${title}`).toBe(true)
+
+    // As text: an Image's alt does not count on the terminal.
+    const terminal = textsOf(await w.elements('terminal'))
+    for (const title of titles) expect(terminal.some(t => t.includes(title)), `the terminal shows the title ${title} as text`).toBe(true)
+    for (const role of roles) expect(terminal.some(t => t.includes(role)), `the terminal shows the role ${role} as text`).toBe(true)
+  })
+})
