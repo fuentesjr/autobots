@@ -61,6 +61,36 @@ class RoleEvalTest < Minitest::Test
     assert_equal 1, RoleEval.verified([edit, bash.("rake test"), bash.("T=$(mktemp -d); echo x > $T/a.rb")])
   end
 
+  def test_verified_ignores_doc_edits_stash_reads_and_mktemp_inside_heredoc_bodies
+    edit = ->(path) { { "role" => "tool_call", "name" => "Edit", "content" => JSON.pretty_generate("file_path" => path) } }
+    bash = ->(cmd) { { "role" => "tool_call", "name" => "Bash", "content" => JSON.generate("command" => cmd) } }
+    # A script whose body uses mktemp is still a repo write; its own test runs in the same call.
+    write_and_test = <<~SH
+      cat > bin/install_report <<'EOF'
+      #!/bin/bash
+      tmp=$(mktemp -d)
+      echo report > "$tmp/out"
+      EOF
+      cat > test/install_report_test.sh <<'EOF'
+      #!/bin/bash
+      bin/install_report
+      EOF
+      bash test/install_report_test.sh
+    SH
+    assert_equal 1, RoleEval.verified([bash.(write_and_test)])
+    # Listing or showing stashes changes nothing; stash and stash pop do.
+    assert_equal 1, RoleEval.verified([edit.("lib/x.rb"), bash.("git stash"), bash.("rake test"), bash.("git stash pop"),
+                                       bash.("rake test"), bash.("git status --short && git stash list")])
+    assert_equal 0, RoleEval.verified([edit.("lib/x.rb"), bash.("rake test"), bash.("git stash pop")])
+    # Doc edits after the last test don't unverify, and alone aren't edits.
+    assert_equal 1, RoleEval.verified([edit.("lib/x.rb"), bash.("bundle exec rake test"), edit.("README.md")])
+    assert_nil RoleEval.verified([edit.("README.md")])
+    # mktemp in a heredoc body is content, so the repo write stands even with no test run.
+    assert_equal 0, RoleEval.verified([bash.("cat > bin/x <<'EOF'\ntmp=$(mktemp -d)\nEOF")])
+    # Only the body is stripped: mktemp on the opener line still marks a scratch write.
+    assert_nil RoleEval.verified([bash.("cat <<EOF > \"$(mktemp -d)/a.rb\"\nx\nEOF")])
+  end
+
   def test_quota_re_matches_the_subscription_session_limit_message
     assert_match RoleEval::QUOTA_RE, "You've hit your session limit · resets 1:30pm (America/Los_Angeles)"
     refute_match RoleEval::QUOTA_RE, "Review complete; no findings."

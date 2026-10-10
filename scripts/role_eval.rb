@@ -48,8 +48,13 @@ module RoleEval
   EDIT_TOOLS = %w[Edit Write NotebookEdit].freeze
   # Test commands the case repos use (rake/minitest, bash test scripts).
   TEST_CMD_RE = /\brake\b.*\btest\b|-Itest\b|_test\.(rb|sh)\b|\btest\/\*/
-  WRITE_CMD_RE = %r{\bsed\s+-i|\bperl\s+-\w*i|\.write\(|\bcat\s*>|\btee\b|\bgit\s+(apply|checkout|restore|stash)\b|
+  WRITE_CMD_RE = %r{\bsed\s+-i|\bperl\s+-\w*i|\.write\(|\bcat\s*>|\btee\b|\bgit\s+(apply|checkout|restore|stash(?!\s+(list|show)\b))\b|
                     (?:^|[\s;&|])>{1,2}(?!\s*/dev/null)\s*[\w./~"'$]}x
+  # Edits to these are docs, not code a test run could verify.
+  DOC_PATH_RE = /\.(md|markdown|rst)\z/i
+  # A heredoc body through its terminator line; the opener line before it is a
+  # command and stays. The body is file content, not commands.
+  HEREDOC_RE = /<<-?\s*(["']?)(\w+)\1[^\n]*\K\n.*?^\s*\2$/m
 
   METRICS = [
     { "id" => "pass", "label" => "pass", "kind" => "binary" },
@@ -300,19 +305,27 @@ module RoleEval
     [trace, tools]
   end
 
-  # 1 if a test command ran after the agent's last file edit, 0 if not, nil if
-  # it edited nothing. Edits are Edit/Write/NotebookEdit calls and Bash calls
-  # that look like writes (sed -i, heredoc writes, redirects) outside a mktemp
-  # scratch dir; one Bash call that writes and then tests counts as verified.
-  # A heuristic, not a grade.
+  # 1 if a test command ran after the agent's last non-doc edit, 0 if not, nil
+  # if it made no non-doc edit. Edits are Edit/Write/NotebookEdit calls on files
+  # other than docs (DOC_PATH_RE) and Bash calls that look like writes (sed -i,
+  # heredoc writes, redirects, git apply/checkout/restore/stash but not stash
+  # list/show) outside a mktemp scratch dir; one Bash call that writes and then
+  # tests counts as verified. mktemp inside a heredoc body doesn't count, since
+  # the body is content being written.
+  # A heuristic, not a grade. Known limits: an unterminated heredoc isn't
+  # stripped, so the whole command is checked for mktemp; Bash writes to doc
+  # files still count as edits; writing a *_test file in Bash counts as a test run.
   def verified(trace)
     edited = pending = false
     trace.each do |t|
       next unless t["role"] == "tool_call"
 
-      cmd = t["name"] == "Bash" ? (JSON.parse(t["content"])["command"] rescue nil).to_s : nil
-      bash_write = cmd && WRITE_CMD_RE.match?(cmd) && !cmd.include?("mktemp")
-      edited = pending = true if EDIT_TOOLS.include?(t["name"]) || bash_write
+      input = (JSON.parse(t["content"]) rescue nil)
+      input = {} unless input.is_a?(Hash)
+      cmd = t["name"] == "Bash" ? input["command"].to_s : nil
+      file_edit = EDIT_TOOLS.include?(t["name"]) && !DOC_PATH_RE.match?(input["file_path"].to_s)
+      bash_write = cmd && WRITE_CMD_RE.match?(cmd) && !cmd.gsub(HEREDOC_RE, "").include?("mktemp")
+      edited = pending = true if file_edit || bash_write
       pending = false if cmd && TEST_CMD_RE.match?(cmd)
     end
     return nil unless edited
