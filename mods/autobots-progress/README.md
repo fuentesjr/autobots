@@ -15,6 +15,8 @@ claude --plugin-dir mods/autobots-progress
 
 On the terminal, clicking the bar's and panel's buttons works only in the fullscreen layout (`/tui fullscreen`). The keyboard works in either layout: `ctrl+x tab` focuses the panel or bar, `tab` moves between buttons, `enter` presses one and `esc` returns to the prompt.
 
+The panel draws its crabs as images where the terminal supports kitty graphics, and the `▣` glyph elsewhere. Claude Code 2.1.296 does not draw images in herdr 0.9.1: herdr identifies itself as `libghostty`, and Claude Code turns images off for it (the `--debug` log shows `kittyGraphics=no (probe: graphics reply OK, terminal libghostty)`). If you use herdr, start Claude Code with `CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1` to turn images on.
+
 ## Tools it adds
 
 - `mcp__autobots-progress__progress`: the dispatcher reports the plan (each task with its `role`), phase and accepted tasks. The autobots `SKILL.md` drives it.
