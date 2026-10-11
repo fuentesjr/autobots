@@ -411,11 +411,16 @@ const SECRET_SHAPES: RegExp[] = [
   /eyJ[\w-]+\.eyJ[\w-]+\./,
   // Credentials in a URL: `//user:password@`.
   /\/\/[^\s\/@:]+:[^\s\/@]+@/,
-  // A sensitive name, with any suffix (`secret_key`, `x-api-key`), then `=` or `:` and a value.
-  /(?:password|passwd|secret|token|api[_-]?key|authorization)[\w-]*["']?\s*[:=]\s*["']?[^\s"']/i,
+  // A sensitive name, with any suffix (`secret_key`, `x-api-key`), then `=` or `:` and a value: the
+  // match runs over the whole value, past a `Bearer` or `Basic` scheme, to its closing quote or the
+  // end of its word. A quote never closed runs to the end of the text.
+  /(?:password|passwd|secret|token|api[_-]?key|authorization)[\w-]*["']?\s*[:=]\s*(?:(?:bearer|basic)\s+)?(?:"[^\s"'][^"]*"?|'[^\s"'][^']*'?|[^\s"']\S*)/i,
   // A bearer token.
   /\bbearer\s+[A-Za-z0-9._~+\/-]{8,}/i,
 ]
+
+// The shapes again, global, to find every match in a text.
+const SECRET_SPANS = SECRET_SHAPES.map(shape => new RegExp(shape.source, `${shape.flags}g`))
 
 // Whether a search pattern looks like it holds a key or secret: one of the shapes above, or a
 // long random-looking run of letters and digits (hex digests included). A pattern over 512
@@ -425,6 +430,19 @@ const looksSecret = (s: string): boolean =>
   s.length > 512 ||
   SECRET_SHAPES.some(shape => shape.test(s)) ||
   (s.match(/[A-Za-z0-9]{20,}/g) ?? []).some(run => /\d/.test(run) && /[A-Za-z]/.test(run))
+
+// Text the model wrote (a title or description) as shown: each word that looks like a key or
+// secret becomes •••. A shape can span words (`api_key: abc123`, `Bearer <token>`), so every word
+// a shape's match touches is masked too, and a run of masked words reads as one •••. For display
+// only: state keeps the raw text, which planned tasks and runs are matched by.
+const maskSecrets = (s: string): string => {
+  if (s.length > 512) return '•••'
+  const spans = SECRET_SPANS.flatMap(shape => [...s.matchAll(shape)].map((m): [number, number] => [m.index, m.index + m[0].length]))
+  const touched = (at: number, end: number) => spans.some(([a, b]) => a < end && at < b)
+  return s
+    .replace(/\S+/g, (word, at: number) => (looksSecret(word) || touched(at, at + word.length) ? '•••' : word))
+    .replace(/•••(?:\s+•••)+/g, '•••')
+}
 
 // A tool call as the panel may show it: the tool's name and at most a short,
 // non-sensitive target. Never a full command, URL, query or path.
@@ -447,7 +465,8 @@ const summarizeTool = (name: string, input: unknown): string => {
     // such as an unterminated quote, leaves just `Bash`: never part of its value.
     const rest = field('command').trimStart().replace(ASSIGNMENTS, '')
     const word = /^[A-Za-z_][A-Za-z0-9_]*=/.test(rest) ? '' : (rest.split(/\s/)[0] ?? '')
-    target = clip(word.replace(/^['"]+|['"]+$/g, '').split(/[\\/]/).pop() ?? '', 24)
+    const file = word.replace(/^['"]+|['"]+$/g, '').split(/[\\/]/).pop() ?? ''
+    target = looksSecret(file) ? '' : clip(file, 24)
   }
   else if (name === 'WebFetch') {
     try {
@@ -483,7 +502,11 @@ type Planned = PlannedTask & { n: number }
 const plannedOf = (f: Flow | null, list: AgentRun[]): Planned[] => {
   if (!f || f.isFinished) return []
   const started = new Set(list.map(a => norm(a.description)))
-  return (f.tasks ?? []).map((t, i) => ({ ...t, n: i + 1 })).filter(t => !started.has(norm(t.title)))
+  // Matched by the raw title, then masked for display.
+  return (f.tasks ?? [])
+    .map((t, i) => ({ ...t, n: i + 1 }))
+    .filter(t => !started.has(norm(t.title)))
+    .map(t => ({ ...t, title: maskSecrets(t.title) }))
 }
 
 const totals = (list: AgentRun[], at: number) => {
@@ -1047,12 +1070,14 @@ export const register: Register = (on, options) => {
     const p: Panel = await read($, panel)
     const at = Math.max(await read($, now), ...list.map(a => a.startedAt), 0)
 
-    const running = list.filter(a => a.status === 'running').reverse()
-    const finished = list.filter(a => a.status !== 'running').reverse()
+    // Rows show descriptions masked; `list` stays raw, so planned tasks match runs exactly.
+    const shown = list.map(a => ({ ...a, description: maskSecrets(a.description) }))
+    const running = shown.filter(a => a.status === 'running').reverse()
+    const finished = shown.filter(a => a.status !== 'running').reverse()
     const planned = plannedOf(f, list)
     const t = totals(list, at)
     // The pane's title says "Agents"; inside, only the flow's own name.
-    const title = f && !f.isFinished ? f.title : ''
+    const title = f && !f.isFinished ? maskSecrets(f.title) : ''
 
     const toggleCompact = (
       <Button
@@ -1248,8 +1273,9 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    const f = await read($, flow)
-    if (f === null || e.props.hasSurvey) return next(e)
+    const stored = await read($, flow)
+    if (stored === null || e.props.hasSurvey) return next(e)
+    const f = { ...stored, title: maskSecrets(stored.title) }
 
     const ui = $.ui.resolve(e)
     const { Box, Text, Button } = ui

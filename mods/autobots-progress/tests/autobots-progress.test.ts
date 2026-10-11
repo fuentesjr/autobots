@@ -1220,6 +1220,146 @@ describe('agent activity in the agents panel', () => {
       expect(shows(strings, '7s ago'), `7s ago on the ${surface}`).toBe(true)
     }
   })
+
+  // ----- 8. secrets in the text the model writes
+  //
+  // Requirement of 2026-10-10 (owner decision): the dispatch title, a planned task title and a subagent
+  // description are shown with any word that looks like a key or secret replaced by •••, on every surface and in
+  // the band as well as the panel. What looks like a secret is what SECRET_PATTERNS above defines; the
+  // HARMLESS_PATTERNS-style words stay readable. Masking is for display only.
+
+  const MASK = '•••'
+  const ANTHROPIC_KEY = SECRET_PATTERNS['an Anthropic key']!
+
+  // Where the text under test is shown: each puts `text` in one place and says where to read it.
+  type Where = 'a running subagent description' | 'a finished subagent description' | 'a planned task title' | 'the dispatch title'
+  const WHERES: Where[] = ['a running subagent description', 'a finished subagent description', 'a planned task title', 'the dispatch title']
+
+  async function place($: Engine, on: On, where: Where, text: string) {
+    const w = await stage($, on)
+    if (where === 'a running subagent description') await spawnSubagent($, 'coding-worker', text)
+    if (where === 'a finished subagent description') {
+      await spawnSubagent($, 'coding-worker', text)
+      await w.finish(WORKER, 'coding-worker')
+    }
+    if (where === 'a planned task title') {
+      await $.tool.call({ tool: PROGRESS_TOOL, title: 'Plan', total: 1, phase: 'delegate', tasks: [{ title: text, role: 'coding-worker' }] } as never)
+    }
+    if (where === 'the dispatch title') await $.tool.call({ tool: PROGRESS_TOOL, title: text } as never)
+    return w
+  }
+
+  // What the band draws on a surface: element text, and the description of a drawing.
+  async function band($: Engine, surface: Surface): Promise<string[]> {
+    const ui = await mountBand($, surface)
+    const strings = (await ui.findAll({})).flatMap(el => [el.text, typeof el.props.alt === 'string' ? el.props.alt : ''])
+    await ui.unmount()
+    return strings.filter(Boolean)
+  }
+
+  // The dispatch title is read in the band, the others in the panel; secrets must be absent from both.
+  const readIn = async ($: Engine, w: Awaited<ReturnType<typeof stage>>, where: Where, surface: Surface) =>
+    where === 'the dispatch title' ? band($, surface) : w.panel(surface)
+  const everywhere = async ($: Engine, w: Awaited<ReturnType<typeof stage>>, surface: Surface) => [...(await w.panel(surface)), ...(await band($, surface))]
+
+  // Secrets that are one word (no whitespace). The Anthropic key is the worked example of the requirement.
+  const ONE_WORD = Object.entries(SECRET_PATTERNS).filter(([, secret]) => !/\s/.test(secret))
+  for (const where of WHERES) {
+    // Every kind is read in the two places that always show it; the other places read the worked example.
+    const kinds = where === 'a running subagent description' || where === 'the dispatch title' ? ONE_WORD : ONE_WORD.filter(([, secret]) => secret === ANTHROPIC_KEY)
+    for (const [kind, secret] of kinds) {
+      test(`${where} containing ${kind} shows the key as ${MASK}, the other words readable, and no part of the key anywhere`, async ($, on) => {
+        const w = await place($, on, where, `rotate ${secret} key`)
+        for (const surface of SURFACES) {
+          expect(shows(await readIn($, w, where, surface), `rotate ${MASK} key`), `"rotate ${MASK} key" on the ${surface}`).toBe(true)
+          const strings = await everywhere($, w, surface)
+          for (const part of windows(secret)) expect(hides(strings, part), `"${part}" of the key is not shown on the ${surface}`).toBe(true)
+        }
+      })
+    }
+  }
+
+  // The secret spans words: no part of the value may appear; which neighbouring words survive is not pinned.
+  const SPANNING: [string, string, string[]][] = [
+    ['an api_key assignment', 'set ' + 'api_' + 'key: abc123def now', ['abc123def']],
+    ['an Authorization bearer header', 'send Authorization: ' + 'Bearer ' + GHP + ' now', windows(GHP)],
+    ['an Authorization basic header', 'send Authorization: ' + 'Basic dXNlcjpwYXNz now', ['dXNlcjpwYXNz']],
+    ['an Authorization bearer header with a short token', 'send Authorization: ' + 'Bearer abc.def now', ['abc.def']],
+    ['a password assignment with a quoted phrase', 'set pass' + 'word: "correct horse battery staple" now', ['correct', 'horse', 'battery', 'staple']],
+    ['a token assignment with a quoted value of two words', "set tok" + "en: 'abc 123' now", ['abc', '123']],
+    ['a password assignment whose quote is never closed', 'set pass' + 'word="abc def', ['abc', 'def']],
+  ]
+  for (const where of WHERES) {
+    for (const [kind, text, values] of SPANNING) {
+      test(`${where} containing ${kind} shows no part of the value`, async ($, on) => {
+        const w = await place($, on, where, text)
+        for (const surface of SURFACES) {
+          const strings = await everywhere($, w, surface)
+          for (const part of values) expect(hides(strings, part), `"${part}" of the value is not shown on the ${surface}`).toBe(true)
+        }
+      })
+    }
+  }
+
+  // Requirement of 2026-10-11 (owner decision): a text longer than 512 characters is shown as ••• with none of its text,
+  // matching the 512-character cap the Grep, Glob and Bash secret check already has.
+  for (const where of WHERES) {
+    test(`${where} longer than 512 characters shows as ${MASK} with none of its text`, async ($, on) => {
+      const text = 'zebra '.repeat(100).trim()
+      expect(text.length, 'the text is over 512 characters').toBeGreaterThan(512)
+      const w = await place($, on, where, text)
+      for (const surface of SURFACES) {
+        expect(shows(await readIn($, w, where, surface), MASK), `${MASK} on the ${surface}`).toBe(true)
+        expect(hides(await everywhere($, w, surface), 'zebra'), `no part of the text is shown on the ${surface}`).toBe(true)
+      }
+    })
+  }
+
+  const HARMLESS_TITLES = ['Glob and grep mods', 'fix token count', 'password reset flow', 'T1']
+  for (const where of WHERES) {
+    for (const title of HARMLESS_TITLES) {
+      test(`${where} reading "${title}" is shown unchanged`, async ($, on) => {
+        const w = await place($, on, where, title)
+        for (const surface of SURFACES) {
+          expect(shows(await readIn($, w, where, surface), title), `"${title}" on the ${surface}`).toBe(true)
+          expect(hides(await everywhere($, w, surface), MASK), `nothing is masked on the ${surface}`).toBe(true)
+        }
+      })
+    }
+  }
+
+  // Masking is for display only: the planned task and the run still match by the real text. The row of a
+  // planned task has the ▢ crab and that of a run the ▣ crab. The desktop draws its crabs as pictures the
+  // kit does not describe, so the planned row is told apart on the terminal only; the masked text is read on both.
+  test('a planned task whose title contains a secret still matches the run started with the same description, and its planned row disappears', async ($, on) => {
+    const w = await stage($, on)
+    const title = `rotate ${ANTHROPIC_KEY} key`
+    await $.tool.call({ tool: PROGRESS_TOOL, title: 'Plan', total: 1, phase: 'delegate', tasks: [{ title, role: 'coding-worker' }] } as never)
+    expect((await w.panel('terminal')).some(s => s.includes('▢')), 'the planned row is drawn before its run starts').toBe(true)
+
+    await spawnSubagent($, 'coding-worker', title)
+    const terminal = await w.panel('terminal')
+    expect(terminal.some(s => s.includes('▢')), 'no planned row is left on the terminal').toBe(false)
+    expect(terminal.some(s => s.includes('▣')), "the run's row is drawn on the terminal").toBe(true)
+    for (const surface of SURFACES) {
+      const strings = await everywhere($, w, surface)
+      expect(shows(strings, `rotate ${MASK} key`), `the run's description is masked on the ${surface}`).toBe(true)
+      for (const part of windows(ANTHROPIC_KEY)) expect(hides(strings, part), `"${part}" of the key is not shown on the ${surface}`).toBe(true)
+    }
+  })
+
+  // Bash: the file name of the command is masked by dropping it, as a Grep or Glob target is.
+  const BASH_WORDS = ONE_WORD.filter(([, secret]) => !/[/=]/.test(secret))
+  for (const [kind, secret] of BASH_WORDS) {
+    test(`a Bash call whose command is ${kind} shows Bash alone, with no part of the key in the panel`, async ($, on) => {
+      const w = await bashRow($, on, `${secret} --help`)
+      for (const surface of SURFACES) {
+        const strings = await w.panel(surface)
+        expect(showsToolAlone(strings, 'Bash'), `the row shows Bash alone on the ${surface}`).toBe(true)
+        for (const part of windows(secret)) expect(hides(strings, part), `"${part}" of the key is not shown on the ${surface}`).toBe(true)
+      }
+    })
+  }
 })
 
 // The owner wants the terminal agents panel to look as close as possible to the desktop one: the
