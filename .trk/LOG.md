@@ -83,3 +83,63 @@ autobots-progress committed on exp/autobots-progress: e8e4166 (vendor verbatim),
 
 ## 2026-10-10T03:51Z log
 autobots-progress: observed activity column committed (33b5523) on exp/autobots-progress; 75/75 tests, tsc, validate green. Bash summary hides NAME=value prefixes (quoted too) and directories. Open: owner decision on Grep/Glob display (S1). Not pushed; evals not run; SKILL.md not installed.
+
+## 2026-10-10T15:32Z log
+autobots-progress: band text fix 4c404d9; terminal crabs+tiles 59622da (87/87, tsc, validate). Owner 2026-10-10: commit freely on exp branch, no merge/rebase to main until owner tests; live test in herdr pane, no Fable agents there; Fable reviewer ok; planned rows match desktop (dimmed crab); loose tile test ok. Next: per-role crabs (12, owner-approved traits, 5 bodies as base), spec tests in progress; then review, live herdr test.
+
+## 2026-10-10T15:32Z log
+Owner 2026-10-10: terminal Collapse mode should show a strip of crab Images like the desktop; do it after the 12 per-role crabs.
+
+## 2026-10-10T15:37Z log
+autobots-progress: Fable review of 59622da: C1 per-group accent, C3 planned rows, C4 stats wrap, N1 rgbaOf, N2 shared rule relayed to the per-role crab coding-worker; N3 (no test for <42 cols/Collapse) parked for the Collapse-strip spec step. README fullscreen tip written (uncommitted).
+
+## 2026-10-10T15:53Z log
+autobots-progress live herdr test (forced images, fullscreen env): panel rows and planned rows reserve the 6-col crab Image (no ▣ alt), no render refusals in debug log; keyboard: ctrl+x tab focuses band, second ctrl+x tab the panel, tab reaches Collapse/Finished/✕, enter toggles Collapse<->Expand. Pixels not seen by me (screencapture denied). Next: spec tests (band fit, exact dim, other crab), coding-worker fixes, Fable review of a8d35a6.
+
+## 2026-10-10T16:09Z log
+autobots-progress: spec round 2 (band fit, exact dim, plain crab, strip order newest-first both surfaces [my decision: match the expanded panel], fit lower bound, ● adjacency) + coding-worker fixes: 146/146, validate, tsc clean. Live herdr 83 cols: 'Review 12/12 ×12' band fits one line. Fable review of the fix diff running. Uncommitted.
+
+## 2026-10-10T16:17Z log
+autobots-progress committed 7dd5b5c (README herdr note) and 7a70e82 (band fit, strip order newest-first both surfaces, desktop dot moved, exact dim, spec tests): 146/146, validate, tsc; Fable review: nothing blocking (nits: bar 6-col floor can overflow below ~56 cols; test cells() wide-char table unused). Live herdr pane w2M:p2 left open. Not pushed, not merged.
+
+## 2026-10-10T21:54Z log
+autobots-progress: 3b-commit skip SubagentHandback in activity (owner approved 2026-10-10), 153/153, validate, tsc. Owner: crabs stay clay with role-colored props; no upstream report; README herdr note kept; SKILL.md stays live while owner tests; untracked files stay. Pending owner: helper-worker prop (redraw backpack vs flashlight), Grep/Glob display A/B/C. Fable review to batch with those.
+
+## 2026-10-10T22:13Z log
+autobots-progress: helper-worker flashlight (edb6051) and Grep/Glob secret filter committed; 210 tests pass; Fable review findings 1-5 fixed, 6/7/9 added; one-digit run rule kept pending owner
+
+## 2026-10-11T01:58Z log
+Owner kept the strict one-digit random-run rule in looksSecret (2026-10-10)
+
+## 2026-10-11T02:10Z log
+Handoff: 88 spec tests for masking secrets in titles/descriptions/Bash file name are uncommitted in tests/autobots-progress.test.ts (72 fail by design); implementation not started; continuing in a new session
+
+## 2026-10-11T02:12Z log
+autobots-progress: session start; baseline 226 pass / 72 fail (section 8 secret masking). Dispatching coding-worker.
+
+## 2026-10-11T02:13Z log
+Owner dropped the stale built-in agent-list investigation (2.1.296) for now (2026-10-10).
+
+## 2026-10-11T16:28Z log
+autobots-progress: secret masking implemented (maskSecrets reuses looksSecret/SECRET_SHAPES; display only). Owner's shell: 298/298 pass in 21.7s; tsc clean, validate ok. 'claude plugin test' hangs ~1h at 0% CPU from the agent's sandboxed Bash, even with HEAD register.tsx: environment, not code. Reviewer next.
+
+## 2026-10-11T16:29Z log
+autobots-progress live herdr check (new pane w2M:p4; w2M:p2 was gone): subagent description 'rotate <fake sk- key> key' shows 'rotate ••• key' in the panel. Claude Code's own transcript and agent list show it raw (outside the mod).
+
+## 2026-10-11T16:34Z log
+autobots-progress: review found spanning-value leak (Basic, quoted passphrase); spec rows + 512-char test added (512 rule pending owner), shape widened, unclosed quote runs to end. 318/318 (run unsandboxed: sandbox caused the 1h hangs), tsc 0, validate ok. Re-review running.
+
+## 2026-10-11T16:52Z log
+autobots-progress committed 4b2e99f: secret masking in titles/descriptions/Bash file name; owner approved 512-char title rule (2026-10-11). 322/322, tsc 0, validate ok, reviewer: no blockers. Live pane w2M:p4 left open. Not pushed, not merged. Note: run 'claude plugin test' unsandboxed; it hangs in the Bash sandbox.
+
+## 2026-10-11T17:04Z log
+Owner approved: added CLAUDE_CODE_PLUGIN_DIRS (autobots-progress) and CLAUDE_CODE_PLUGIN_DIR_WATCH=1 to ~/.claude/settings.json env for desktop-app testing (2026-10-11). Remove after testing; backup in session scratchpad.
+
+## 2026-10-11T17:12Z log
+Owner confirmed autobots-progress works and looks right in the desktop app's Code tab local session (2026-10-11). Note: a chat-tab session with a folder attached is not Claude Code and cannot load mods. Settings env keys still in place.
+
+## 2026-10-11T17:20Z log
+Merged exp/autobots-progress into main (1c5dbf6, --no-ff, owner request 2026-10-11, no PR, not pushed); 322/322 on main. Includes autobots SKILL.md progress-reporting section, UNCERTIFIED: skill-lint + eval suite not run (repo rule); owner chose to merge anyway. Follow-up: certify SKILL.md change. Also committed .gitignore for generated mod tsconfig.json and .gitattributes union merge for trk log.
+
+## 2026-10-11T17:32Z log
+Committing .trk/LOG.md backlog on main (owner approved 2026-10-11).
