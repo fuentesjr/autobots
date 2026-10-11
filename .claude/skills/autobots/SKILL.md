@@ -78,6 +78,20 @@ In every user-facing update, label each spawned subagent as
 Any tool-generated agent id is traceability metadata only — the semantic
 label is what the user sees.
 
+## Progress reporting (optional)
+
+If `mcp__autobots-progress__progress` is among your tools (including as a deferred tool, loaded first with ToolSearch `select:mcp__autobots-progress__progress`), report progress with it. If it is absent or ToolSearch does not find it, skip silently and never mention it to the user.
+
+Fields left out keep their previous value:
+
+- `title`: short task name, a few words.
+- `phase`: one of `plan`, `delegate`, `review`, `close`.
+- `total`: planned subagent tasks. `done`: tasks accepted after your review; a returned-but-rejected result does not count.
+- `tasks`: ordered `{ title, role, after }`. `role` is the roster `subagent_type`; `after` lists the 1-based numbers of tasks it waits on. Each `title` must equal, verbatim, the `description` you pass to `Agent` for that dispatch.
+- `finished`: `true` once closed.
+
+Call it once after the dispatch plan (`phase: delegate`, `total`, `tasks`), each time you accept a result (`done`), when switching phase or re-planning (resend `tasks`), and once at the end with `finished: true`. Subagents do not report their own steps (roles have fixed tool allowlists), so do not ask them to.
+
 ## Roster (dispatch list)
 
 - `planner` — architecture, decomposition, sequencing, risk analysis (read-only)

@@ -1,0 +1,23 @@
+{
+  "name": "autobots-progress",
+  "version": "0.1.0",
+  "description": "Progress bar above the prompt for the autobots dispatcher, plus an agents panel (/agents-info): running, finished and planned subagents with model, task progress, context, cost and time.",
+  "author": {
+    "name": "Salvador Fuentes Jr."
+  },
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "language": {
+      "type": "string",
+      "title": "Panel language",
+      "description": "auto follows Claude Code's language setting, then the system locale",
+      "default": "auto",
+      "options": [
+        "auto",
+        "en",
+        "ru"
+      ]
+    }
+  },
+  "license": "MIT"
+}
