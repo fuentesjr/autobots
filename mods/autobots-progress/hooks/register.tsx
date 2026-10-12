@@ -1501,6 +1501,15 @@ export const register: Register = on => {
 
     const ui = $.ui.resolve(e)
     const { Box, Text, Button } = ui
+    // The band is one chain shared with other mods: the bar sits on top and what the
+    // rest of the chain draws (another mod's rows, the engine's band) stays below it.
+    const below = await next(e)
+    const stack = (bar: JSX.Element) => (
+      <Box flexDirection="column">
+        {bar}
+        {below}
+      </Box>
+    )
     const list = await read($, agents)
     const crew = `×${list.length + plannedOf(f, list).length}`
     const isWorking = list.some(a => a.status === 'running')
@@ -1525,7 +1534,7 @@ export const register: Register = on => {
       // About 8 CSS px per reported column; the rest is the count, the dismiss
       // and their gaps. No floor above the slot: a row wider than it would wrap.
       const width = Math.max(180, Math.min(1600, (e.props.bodyColumns || 100) * 8 - 96))
-      return (
+      return stack(
         <Box flexDirection="row" alignItems="center" gap={1}>
           <Svg source={rowSvg(f, width, isWorking)} alt={`${f.title}: ${[label(f), mark].filter(Boolean).join(' · ')}, ${percent}`} width={width} height={H} />
           {crewButton}
@@ -1540,7 +1549,7 @@ export const register: Register = on => {
     // percent, ▣, the crew count and ✕, each one cell per character, with a 2-cell gap before each.
     const after = [label(f), mark, percent, '▣', crew, '✕'].filter(Boolean).reduce((w, s) => w + 2 + [...s].length, 0)
     const width = Math.max(6, Math.min(40, cols - titleW - 2 - after))
-    return (
+    return stack(
       <Box flexDirection="row" gap={2}>
         <Box width={titleW} flexShrink={0}>
           <Text color={f.isFinished ? DONE : ACCENT}>● </Text>

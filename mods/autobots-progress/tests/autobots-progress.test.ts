@@ -4,7 +4,7 @@
 // discovered from what the mod does, not assumed.
 import { describe, expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
-import type { Engine, MockClock } from 'claude-code/testing'
+import type { Engine, MockClock, Plugin } from 'claude-code/testing'
 
 const ROSTER = [
   'planner',
@@ -121,12 +121,13 @@ async function mountBand($: Engine, surface: 'terminal' | 'desktop') {
 }
 
 // True when the mod drew its own bar, false when it left the band to the engine.
+// The bar is told by its own dismiss Button, so other rows in the band do not count.
 // The terminal and the desktop must agree.
 async function hasBar($: Engine): Promise<boolean> {
   const seen: boolean[] = []
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await mountBand($, surface)
-    seen.push((await ui.find({ key: ENGINE_BAND })) === undefined)
+    seen.push((await ui.find({ type: 'Button', key: 'autobots-dismiss' })) !== undefined)
     await ui.unmount()
   }
   expect(seen[0], 'the bar is drawn on the terminal exactly when it is drawn on the desktop').toBe(seen[1])
@@ -244,6 +245,60 @@ describe('progress bar', () => {
     expect(texts.some(t => t.includes('0%')), 'the percent is visible text').toBe(true)
   })
 
+  const QUESTION = 'Open question: which database?'
+  // The band above the prompt is one render chain: a bar that ended it hid another
+  // mod's rows (decision-desk's open questions) until the bar was dismissed.
+  // An inline plugin closes over nothing of the test file, so each spells QUESTION out.
+  const OTHER_BAND: Plugin = {
+    name: 'other-band',
+    register(on) {
+      on('ui.render', { component: 'AbovePrompt' }, async ($, e) => {
+        const { Text } = $.ui.resolve(e)
+        return Text({ children: 'Open question: which database?' })
+      })
+    },
+  }
+
+  // Outside the mod, as decision-desk wraps the band: its row below whatever the chain beneath drew.
+  const OUTER_BAND: Plugin = {
+    name: 'outer-band',
+    tier: 'prepend',
+    register(on) {
+      on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+        const { Box, Text } = $.ui.resolve(e)
+        const above = await next(e)
+        return Box({ flexDirection: 'column', children: [above, Text({ children: 'Open question: which database?' })] })
+      })
+    },
+  }
+
+  // The bar, then the question row, each drawn on the terminal and the desktop.
+  async function expectBarAboveQuestion($: Engine): Promise<void> {
+    for (const surface of ['terminal', 'desktop'] as const) {
+      const ui = await mountBand($, surface)
+      const elements = await ui.findAll({})
+      await ui.unmount()
+      // Each element on its own: the title as text or leading the drawing's description, the row by its text.
+      const bar = elements.findIndex(el => showsTitle([el.text, typeof el.props.alt === 'string' ? el.props.alt : ''], 'Ship the thing'))
+      const other = elements.findIndex(el => el.text === QUESTION)
+      expect(bar, `the bar is drawn on the ${surface}`).toBeGreaterThanOrEqual(0)
+      expect(other, `the other mod's rows are drawn on the ${surface}`).toBeGreaterThanOrEqual(0)
+      expect(bar, `the bar comes before the other mod's rows on the ${surface}`).toBeLessThan(other)
+    }
+  }
+
+  test("the bar shares the band with another mod's rows, the bar above them, on the terminal and the desktop", { plugins: [OTHER_BAND] }, async ($, on) => {
+    await boot($, on)
+    await $.tool.call({ tool: PROGRESS_TOOL, title: 'Ship the thing', finished: true } as never)
+    await expectBarAboveQuestion($)
+  })
+
+  test("the bar stays above the rows of a mod that wraps the band from outside, on the terminal and the desktop", { plugins: [OUTER_BAND] }, async ($, on) => {
+    await boot($, on)
+    await $.tool.call({ tool: PROGRESS_TOOL, title: 'Ship the thing', finished: true } as never)
+    await expectBarAboveQuestion($)
+  })
+
   test('a bar triggered by a roster subagent with no reported title is titled autobots', async ($, on) => {
     await boot($, on)
     await spawnSubagent($, 'planner')
@@ -313,7 +368,7 @@ function measure(node: Drawn, columns: number): { width: number; lines: number }
     : shown.reduce((w, k) => w + k.width, 0) + gap * Math.max(0, shown.length - 1)
   const lines = isColumn
     ? shown.reduce((l, k) => l + k.lines, 0) + gap * Math.max(0, shown.length - 1)
-    : Math.max(1, ...shown.map(k => k.lines))
+    : shown.length === 0 ? 0 : Math.max(...shown.map(k => k.lines))
   let fixed: number | undefined
   if (typeof props.width === 'number') fixed = props.width
   else if (typeof props.width === 'string') {
