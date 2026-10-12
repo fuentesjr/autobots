@@ -14,6 +14,11 @@ export type Flow = {
   phase: Phase
   isFinished: boolean
   tasks: PlannedTask[]
+  // Autobots Mode: the main agent's direct file edits in this flow. Only the count, never what
+  // was edited. Absent while the flow does not count (started only by a roster subagent spawn).
+  edits?: number
+  // Started by the autobots skill and not yet reported: the first progress call continues it.
+  isSkillStarted?: boolean
 }
 
 export type AgentStatus = 'running' | 'done' | 'failed'
@@ -54,6 +59,8 @@ declare module 'claude-code' {
       agents: AgentRun[]
       panel: Panel
       now: number
+      // The session's working directory, from `session.start`: Autobots Mode counts edits inside it.
+      cwd: string
     }
   }
 }

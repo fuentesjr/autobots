@@ -11,6 +11,7 @@ const panel = atom({ plugin: 'autobots-progress', key: 'panel' } as const, {
   autoOpenedFor: '',
 })
 const now = atom({ plugin: 'autobots-progress', key: 'now' } as const, 0)
+const cwd = atom({ plugin: 'autobots-progress', key: 'cwd' } as const, '')
 
 const TOOL = 'mcp__autobots-progress__progress'
 const PANE = 'autobots-agents'
@@ -26,6 +27,8 @@ type ProgressInput = {
   finished?: boolean
   tasks?: { title?: string; role?: string; after?: number[] }[]
 }
+
+const directEdits = (n: number): string => `${n} direct ${n === 1 ? 'edit' : 'edits'}`
 
 const TEXT = {
   pane: 'Agents',
@@ -57,6 +60,14 @@ const TEXT = {
   calls: (n: number) => `${n} ${n === 1 ? 'call' : 'calls'}`,
   ago: 'ago',
   units: ['s', 'm', 'h'],
+  mainAgent: (n: number) => `Main agent: ${directEdits(n)}`,
+  reminder:
+    'An autobots flow is active: file edits belong to the roster. This direct edit was counted and the owner sees the count. ' +
+    'Delegate further changes to a roster subagent instead of editing files yourself.',
+  closing: (n: number) =>
+    n
+      ? `main agent made ${directEdits(n)} during this flow; include this count in your closing summary`
+      : 'main agent made no direct edits during this flow; include this in your closing summary',
 } as const
 
 const blank = (): Flow => ({
@@ -69,8 +80,14 @@ const blank = (): Flow => ({
   tasks: [],
 })
 
+// The first progress call after the autobots skill started a flow continues it, whatever its title.
 const isNewFlow = (prev: Flow | null, input: ProgressInput): boolean =>
-  !prev || prev.isFinished || (input.title !== undefined && input.title.trim() !== prev.title)
+  !prev ||
+  prev.isFinished ||
+  (!prev.isSkillStarted && input.title !== undefined && input.title.trim() !== prev.title)
+
+// Autobots Mode counts the main agent's direct edits from the flow's start until finished: true.
+const isCounting = (f: Flow | null): f is Flow & { edits: number } => !!f && !f.isFinished && f.edits !== undefined
 
 const cleanTasks = (tasks: ProgressInput['tasks']): PlannedTask[] | undefined =>
   tasks
@@ -88,14 +105,18 @@ const merge = (prev: Flow | null, input: ProgressInput): Flow => {
   const total = Math.max(0, Math.round(input.total ?? (input.tasks ? tasks.length : base.total)))
   const done = Math.min(total || Infinity, Math.max(0, Math.round(input.done ?? base.done)))
   const phase = input.phase && PHASES.includes(input.phase) ? input.phase : base.phase
+  const { isSkillStarted: _, ...rest } = base
   return {
-    ...base,
+    ...rest,
     title: input.title?.trim() || base.title,
     total,
     done,
     phase: input.finished ? 'close' : phase,
     isFinished: input.finished === true,
     tasks,
+    // A progress call starts counting at 0, or keeps the count; finished: true never starts it,
+    // and keeps the counting flow's count even under a new title.
+    ...(input.finished ? (isCounting(prev) ? { edits: prev.edits } : {}) : { edits: base.edits ?? 0 }),
   }
 }
 
@@ -106,6 +127,9 @@ const label = (f: Flow): string => {
   const count = f.total ? `${f.done}/${f.total}` : `${f.running} ${TEXT.busy}`
   return `${f.phase === 'review' ? TEXT.review : TEXT.tasks} ${count}`
 }
+
+// The band's edit mark: shown once the count is above 0.
+const editMark = (f: Flow): string => (f.edits ? `✎ ${f.edits}` : '')
 
 const ratio = (f: Flow): number => (f.isFinished ? 1 : f.total ? f.done / f.total : 0)
 
@@ -184,7 +208,7 @@ const rowSvg = (f: Flow, W: number, isWorking: boolean): string => {
     if (x > fillW + 4) ticks.push(`<rect x="${x}" y="${BAR_H / 2 - 4}" width="1.5" height="8" rx="0.75"/>`)
   }
 
-  const text = label(f)
+  const text = [label(f), editMark(f)].filter(Boolean).join(' · ')
   const pillW = Math.round(18 + text.length * 6.6)
   const pillX = Math.max(0, Math.min(BAR_W - pillW, fillW - pillW))
   const percent = `${Math.round(ratio(f) * 100)}%`
@@ -781,6 +805,221 @@ const ctxBar = (pct: number, width: number): string => {
 
 const STATUS_GLYPH: Record<string, string> = { running: '●', done: '✓', failed: '✗', planned: '◷' }
 
+// ---------------------------------------------------------------------------
+// Autobots Mode: which of the main agent's tool calls are direct edits of project files.
+// Only the verdict leaves here: no command, path or file name is kept or shown.
+
+// `autobots`, or `<plugin>:autobots` when the skill ships in a plugin.
+const isAutobotsSkill = (skill: string): boolean => /^(?:[^:]*:)?autobots$/.test(skill)
+
+// `/autobots`, alone or followed by its arguments; not `/autobots-lite`.
+const isAutobotsPrompt = (text: string): boolean => /^\/autobots(?![\w-])/.test(text)
+
+// Prompt origins that are a person's own prompt (PromptOrigin in the API types).
+const OWNER_ORIGINS: readonly string[] = ['composer', 'bridge', 'sdk']
+
+// The session's working directory, and the directories whose files never count.
+type Places = { cwd: string; home: string; tmp: string; never: string[] }
+
+// `p` made absolute against `base`, with `.` and `..` resolved.
+const resolvePath = (base: string, p: string): string => {
+  const parts: string[] = []
+  for (const seg of (p.startsWith('/') ? p : `${base}/${p}`).split('/')) {
+    if (seg === '..') parts.pop()
+    else if (seg && seg !== '.') parts.push(seg)
+  }
+  return `/${parts.join('/')}`
+}
+
+const isUnder = (path: string, dir: string): boolean => dir === '/' || path === dir || path.startsWith(`${dir}/`)
+
+async function placesOf($: EngineInterface): Promise<Places> {
+  const [dir, home = '', tmp = ''] = await Promise.all([read($, cwd), $.env.get('HOME'), $.env.get('TMPDIR')])
+  // Temporary directories (the scratchpad among them), devices and ~/.claude; on macOS /tmp and
+  // $TMPDIR also go by their /private path.
+  const never = ['/tmp', '/dev', tmp, home && `${home}/.claude`]
+    .filter(Boolean)
+    .map(dir => resolvePath('/', dir))
+    .flatMap(dir => [dir, `/private${dir}`])
+  return { cwd: dir && resolvePath('/', dir), home, tmp, never }
+}
+
+// A project file: inside the working directory and under none of the `never` directories.
+// A relative path is taken against `base`, the working directory unless a `cd` moved it.
+// Before the session's start reported its directory, nothing is a project file.
+const isProjectPath = (at: Places, path: string, base = at.cwd): boolean => {
+  const abs = resolvePath(base, path)
+  return at.cwd !== '' && isUnder(abs, at.cwd) && !at.never.some(dir => isUnder(abs, dir))
+}
+
+// Expands `~`, `$HOME` and `$TMPDIR` in a Bash word; undefined when the word still holds a
+// variable or `~` the mod cannot read, so that the target is unknown and does not count.
+const expandWord = (at: Places, word: string): string | undefined => {
+  const out = word
+    .replace(/^~(?=\/|$)/, at.home || '~')
+    .replace(/\$(?:\{(HOME|TMPDIR)\}|(HOME|TMPDIR)(?![A-Za-z0-9_]))/g, (_, a?: string, b?: string) => ((a ?? b) === 'HOME' ? at.home : at.tmp) || '$')
+  return /^~|\$/.test(out) ? undefined : out
+}
+
+// Heredoc bodies are text, not commands: a `>` inside one is no redirect.
+const stripHeredocs = (command: string): string => {
+  const out: string[] = []
+  const ends: string[] = []
+  for (const line of command.split('\n')) {
+    if (ends.length) {
+      if (line.trim() === ends[0]) ends.shift()
+      continue
+    }
+    out.push(line)
+    for (const m of line.matchAll(/(?<!<)<<-?(?!<)\s*(['"]?)([A-Za-z_][\w-]*)\1/g)) ends.push(m[2] ?? '')
+  }
+  return out.join('\n')
+}
+
+type ShellToken = { word: string; op?: undefined } | { op: string; word?: undefined }
+
+// A rough shell lexer: words, unquoted, and the operators that split commands or redirect. Enough
+// to find write targets; not a shell. `$(…)`, globs and nested `bash -c` scripts are not parsed.
+const lexShell = (s: string): ShellToken[] => {
+  const tokens: ShellToken[] = []
+  let word: string | null = null
+  const flush = () => {
+    if (word !== null) tokens.push({ word })
+    word = null
+  }
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i] ?? ''
+    if (c === "'") {
+      const end = s.indexOf("'", i + 1)
+      const stop = end < 0 ? s.length : end
+      word = (word ?? '') + s.slice(i + 1, stop)
+      i = stop
+    } else if (c === '"') {
+      let j = i + 1
+      let buf = ''
+      while (j < s.length && s[j] !== '"') {
+        if (s[j] === '\\' && j + 1 < s.length) j++
+        buf += s[j++]
+      }
+      word = (word ?? '') + buf
+      i = j
+    } else if (c === '\\') {
+      word = (word ?? '') + (s[++i] ?? '')
+    } else if (c === ' ' || c === '\t') {
+      flush()
+    } else {
+      const op = /^(?:&>>|&>|>>|>\||>&|>|<<<|<<-|<<|<&|<|\|\||\||&&|&|;;|;|\n|\(|\))/.exec(s.slice(i))?.[0]
+      if (!op) {
+        word = (word ?? '') + c
+        continue
+      }
+      // `2>`: digits right before a redirect name its file descriptor, not a word.
+      if (word !== null && /^\d+$/.test(word) && /^[<>]/.test(op)) word = null
+      flush()
+      tokens.push({ op })
+      i += op.length - 1
+    }
+  }
+  flush()
+  return tokens
+}
+
+const PREFIXES = ['do', 'then', 'else', '{', '!', 'sudo', 'env', 'time', 'nohup', 'command']
+
+// Files one simple command writes, by the program it runs (requirement 10). In-place editors write
+// their last operand, `cp` its destination; `patch` and `git apply` write the working tree.
+const commandTargets = (words: string[]): string[] => {
+  // Past leading assignments, shell keywords and wrappers that run the command after them;
+  // `env` takes assignments of its own.
+  const isAssignment = (w: string) => /^[A-Za-z_][A-Za-z0-9_]*=/.test(w)
+  let start = 0
+  while (start < words.length && (isAssignment(words[start] ?? '') || PREFIXES.includes(words[start] ?? ''))) start++
+  const [cmd = '', ...args] = words.slice(start)
+  const operands = args.filter(a => a && !a.startsWith('-'))
+  switch (cmd.split('/').pop()) {
+    case 'tee':
+    case 'mv':
+    case 'rm':
+      return operands
+    case 'cp':
+      return operands.slice(-1)
+    case 'sed':
+      return args.some(a => /^-[nEsrz]*i|^--in-place/.test(a)) ? operands.slice(-1) : []
+    case 'perl':
+    case 'ruby':
+      return args.some(a => /^-[0-9adlnpsvwcWTX]*i/.test(a)) ? operands.slice(-1) : []
+    case 'patch':
+      return ['.']
+    case 'git': {
+      // Past the global options; `-C <dir>` moves where the command runs.
+      let base = '.'
+      let j = 0
+      for (; j < args.length && (args[j] ?? '').startsWith('-'); j++) {
+        if (args[j] === '-C') base = args[++j] ?? base
+        else if (args[j] === '-c') j++
+      }
+      const [sub, ...rest] = args.slice(j)
+      const within = (paths: string[]) => paths.map(p => (p.startsWith('/') ? p : `${base}/${p}`))
+      // `git apply --check` and its report-only modes write nothing; `git restore --staged`
+      // touches only the index unless `--worktree` comes with it.
+      if (sub === 'apply') return rest.some(a => ['--check', '--stat', '--numstat', '--summary'].includes(a)) ? [] : [base]
+      if (sub === 'restore') {
+        const isIndexOnly = rest.some(a => a === '--staged' || a === '-S') && !rest.some(a => a === '--worktree' || a === '-W')
+        return isIndexOnly ? [] : within(rest.filter(a => a && !a.startsWith('-')))
+      }
+      if (sub === 'checkout' && rest.includes('--')) return within(rest.slice(rest.indexOf('--') + 1))
+      return []
+    }
+    default:
+      return []
+  }
+}
+
+const isWriteRedirect = (op: string): boolean => ['>', '>>', '>|', '&>', '&>>', '>&'].includes(op)
+
+// Whether a Bash command writes a project file (requirements 10 and 11): an output redirect, or a
+// program from `commandTargets`, with a target inside the working directory. Follows `cd`.
+const isBashWrite = (at: Places, command: string): boolean => {
+  const tokens = lexShell(stripHeredocs(command))
+  let base: string | undefined = at.cwd
+  const bases: (string | undefined)[] = []
+  let words: string[] = []
+  let targets: string[] = []
+  const endCommand = (): boolean => {
+    const hit = [...targets, ...commandTargets(words)].some(t => {
+      const path = expandWord(at, t)
+      return path !== undefined && (path.startsWith('/') || base !== undefined) && isProjectPath(at, path, base ?? at.cwd)
+    })
+    if (words[0] === 'cd') {
+      const dir = words[1] === undefined ? at.home : words[1] === '-' ? undefined : expandWord(at, words[1])
+      base = base !== undefined && dir ? resolvePath(base, dir) : undefined
+    }
+    words = []
+    targets = []
+    return hit
+  }
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i]
+    if (t?.word !== undefined) words.push(t.word)
+    else if (t && isWriteRedirect(t.op)) {
+      const next = tokens[i + 1]?.word
+      if (next === undefined) continue
+      i++
+      // `>&2`, `2>&1`: a copy of another file descriptor, not a file.
+      if (!(t.op === '>&' && /^(?:\d+|-)$/.test(next))) targets.push(next)
+    } else if (t?.op.startsWith('<')) {
+      // An input, a heredoc delimiter or a here-string: never a target.
+      if (tokens[i + 1]?.word !== undefined) i++
+    } else {
+      if (endCommand()) return true
+      // A subshell's `cd` ends at its `)`.
+      if (t?.op === '(') bases.push(base)
+      else if (t?.op === ')' && bases.length) base = bases.pop()
+    }
+  }
+  return endCommand()
+}
+
 // Opens the agents pane, or closes it when it is up; true when it ends up open.
 async function togglePane($: EngineInterface): Promise<boolean> {
   const isOpen = (await $.ui.panes()).some(p => p.id === PANE)
@@ -794,6 +1033,13 @@ async function togglePane($: EngineInterface): Promise<boolean> {
   return true
 }
 
+// A flow the autobots skill started: titled `autobots`, counting from 0, and continued by the
+// first progress call. Like any new flow, it starts with a clean list; agents still running stay.
+async function startSkillFlow($: EngineInterface): Promise<void> {
+  await update($, agents, list => list.filter(a => a.status === 'running'))
+  await update($, flow, () => ({ ...blank(), edits: 0, isSkillStarted: true }))
+}
+
 async function autoOpen($: EngineInterface, key: string): Promise<void> {
   const p = await read($, panel)
   if (p.autoOpenedFor === key) return
@@ -804,6 +1050,7 @@ async function autoOpen($: EngineInterface, key: string): Promise<void> {
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const started = await next(e)
+    await update($, cwd, () => started.cwd)
     await $.tool.register({
       name: 'progress',
       description:
@@ -864,9 +1111,46 @@ export const register: Register = on => {
       // A new flow starts with a clean list; agents still running stay.
       await update($, agents, list => list.filter(a => a.status === 'running'))
     }
-    const next = await update($, flow, p => merge(p, input))
-    if (next && input.tasks?.length) await autoOpen($, next.title)
-    return { result: `ok: ${label(next ?? blank())}` }
+    const next = (await update($, flow, p => merge(p, input))) ?? blank()
+    if (input.tasks?.length) await autoOpen($, next.title)
+    // Autobots Mode: the closing call states the count for the main agent's closing summary.
+    const closing = input.finished && next.edits !== undefined ? ` · ${TEXT.closing(next.edits)}` : ''
+    return { result: `ok: ${label(next)}${closing}` }
+  })
+
+  // Autobots Mode: the autobots skill starts a counting flow, by the main agent's Skill call or an
+  // owner prompt. Either, during a flow, starts a new one at 0.
+  on('tool.call', { tool: 'Skill' }, async ($, e, next) => {
+    const answer = await next(e)
+    if (!e.agentId && answer.deny === undefined && !answer.isError && isAutobotsSkill(e.skill)) await startSkillFlow($)
+    return answer
+  })
+
+  // Only a person's own prompt: typed at the terminal, sent through Remote Control, or the SDK
+  // host's turn. Never a notification, a peer session, a schedule or a relay. Once it entered.
+  on('prompt.submit', async ($, e, next) => {
+    const entered = await next(e)
+    if (entered.drop === undefined && OWNER_ORIGINS.includes(e.origin.kind) && isAutobotsPrompt(e.text)) await startSkillFlow($)
+    return entered
+  })
+
+  // Autobots Mode: counts a main-agent edit of a project file that ran, during a counting flow;
+  // the first of a flow carries one reminder. Never refuses or changes the call.
+  on('tool.call', { tool: ['Edit', 'Write', 'NotebookEdit', 'Bash'] }, async ($, e, next) => {
+    const answer = await next(e)
+    if (e.agentId || answer.deny !== undefined || answer.isError || !isCounting(await read($, flow))) return answer
+    const at = await placesOf($)
+    const text = (v: unknown): string => (typeof v === 'string' ? v : '')
+    const path = text(e.tool === 'NotebookEdit' ? e.notebook_path : e.tool === 'Bash' ? '' : e.file_path)
+    const isEdit = e.tool === 'Bash' ? isBashWrite(at, text(e.command)) : path !== '' && isProjectPath(at, path)
+    if (!isEdit) return answer
+    let isFirst = false
+    await update($, flow, f => {
+      if (!isCounting(f)) return f
+      isFirst = f.edits === 0
+      return { ...f, edits: f.edits + 1 }
+    })
+    return isFirst ? { ...answer, context: [...(answer.context ?? []), TEXT.reminder] } : answer
   })
 
   // Safety net: worker launches move the faint layer even if the orchestrator forgets to report.
@@ -1028,6 +1312,8 @@ export const register: Register = on => {
         onPress={() => update($, panel, prev => ({ ...prev, isDoneCollapsed: !prev.isDoneCollapsed }))}
       />
     )
+    // Autobots Mode: the main agent's direct edits in this flow, kept after finished: true.
+    const edits = f?.edits !== undefined && <Text key="edits">{TEXT.mainAgent(f.edits)}</Text>
     const isEmpty = list.length === 0 && planned.length === 0
     const summary = `≈${fmtCost(t.cost)}, ${fmtTokens(t.tokens)} ${TEXT.tokensWord}, ${fmtTime(t.time)}`
 
@@ -1048,6 +1334,7 @@ export const register: Register = on => {
         return (
           <Box flexDirection="column" gap={1}>
             <Svg source={compactSvg(W, [...running, ...finished], planned, t)} alt={`${list.length} ${TEXT.agentsCount}, ${summary}`} width={W} height={32} />
+            {edits}
             {toggleCompact}
           </Box>
         )
@@ -1055,6 +1342,7 @@ export const register: Register = on => {
       return (
         <Box flexDirection="column">
           <Svg source={headerSvg(W, title, t)} alt={title ? `${title}: ${summary}` : summary} width={W} height={headerHeight(title)} />
+          {edits}
           {toggleCompact}
           {isEmpty && <Text dimColor>{TEXT.empty}</Text>}
           {running.length > 0 && section('h-run', `${TEXT.running} · ${running.length}`)}
@@ -1161,6 +1449,7 @@ export const register: Register = on => {
             {tile(TEXT.time, fmtTime(t.time))}
           </Box>
         )}
+        {edits}
         {p.isCompact ? (
           <Box flexDirection="row" gap={1}>
             {strip.slice(0, fit).map(c => (
@@ -1219,6 +1508,7 @@ export const register: Register = on => {
       <Button key="autobots-agents" label={crew} plain onPress={() => void togglePane($)} />
     )
     const percent = `${Math.round(ratio(f) * 100)}%`
+    const mark = editMark(f)
     const dismiss = (
       <Button
         key="autobots-dismiss"
@@ -1237,7 +1527,7 @@ export const register: Register = on => {
       const width = Math.max(180, Math.min(1600, (e.props.bodyColumns || 100) * 8 - 96))
       return (
         <Box flexDirection="row" alignItems="center" gap={1}>
-          <Svg source={rowSvg(f, width, isWorking)} alt={`${f.title}: ${label(f)}, ${percent}`} width={width} height={H} />
+          <Svg source={rowSvg(f, width, isWorking)} alt={`${f.title}: ${[label(f), mark].filter(Boolean).join(' · ')}, ${percent}`} width={width} height={H} />
           {crewButton}
           {dismiss}
         </Box>
@@ -1246,9 +1536,9 @@ export const register: Register = on => {
 
     const cols = e.props.bodyColumns
     const titleW = Math.max(8, Math.min(30, f.title.length + 2, Math.floor(cols / 3)))
-    // The bar takes what the row leaves: after it come the label, the percent, ▣, the crew
-    // count and ✕, each one cell per character, with a 2-cell gap before each.
-    const after = [label(f), percent, '▣', crew, '✕'].reduce((w, s) => w + 2 + [...s].length, 0)
+    // The bar takes what the row leaves: after it come the label, the edit mark if any, the
+    // percent, ▣, the crew count and ✕, each one cell per character, with a 2-cell gap before each.
+    const after = [label(f), mark, percent, '▣', crew, '✕'].filter(Boolean).reduce((w, s) => w + 2 + [...s].length, 0)
     const width = Math.max(6, Math.min(40, cols - titleW - 2 - after))
     return (
       <Box flexDirection="row" gap={2}>
@@ -1258,6 +1548,7 @@ export const register: Register = on => {
         </Box>
         <Text color={f.isFinished ? DONE : ACCENT}>{barText(f, width)}</Text>
         <Text bold>{label(f)}</Text>
+        {mark !== '' && <Text color={CLAY}>{mark}</Text>}
         <Text dimColor>{percent}</Text>
         <Text color={CLAY}>▣</Text>
         {crewButton}
