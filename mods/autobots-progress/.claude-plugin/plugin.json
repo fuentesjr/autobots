@@ -6,18 +6,5 @@
     "name": "Salvador Fuentes Jr."
   },
   "types": "./types/index.d.ts",
-  "userConfig": {
-    "language": {
-      "type": "string",
-      "title": "Panel language",
-      "description": "auto follows Claude Code's language setting, then the system locale",
-      "default": "auto",
-      "options": [
-        "auto",
-        "en",
-        "ru"
-      ]
-    }
-  },
   "license": "MIT"
 }

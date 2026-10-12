@@ -44,14 +44,6 @@ Each role has its own color and its own crab, dressed for the job. Planned tasks
 
 Other subagent types get a plain crab.
 
-## Settings
-
-`language`: `auto` (default), `en` or `ru`. `auto` follows Claude Code's `language` setting, then the system locale, and falls back to English. Set it in `/config`, or, for a mod loaded by hand, in `~/.claude/settings.json`:
-
-```json
-{ "pluginConfigs": { "autobots-progress": { "options": { "language": "ru" } } } }
-```
-
 ## Attribution
 
 Derived from savvy-progress by johnnyvizz (claude-kit @ 272a877), MIT — see LICENSE.

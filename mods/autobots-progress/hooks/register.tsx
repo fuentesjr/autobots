@@ -27,99 +27,37 @@ type ProgressInput = {
   tasks?: { title?: string; role?: string; after?: number[] }[]
 }
 
-// ---------------------------------------------------------------------------
-// Language: the `language` option, else Claude Code's `language` setting, else the
-// process locale; English when nothing says Russian.
-
-type Lang = 'en' | 'ru'
-
-const STRINGS = {
-  en: {
-    pane: 'Agents',
-    cost: 'Cost',
-    tokens: 'Tokens',
-    time: 'Time',
-    collapse: 'Collapse',
-    expand: 'Expand',
-    running: 'Running',
-    finished: 'Finished',
-    planned: 'Planned',
-    empty: 'No subagents yet.',
-    round: 'round',
-    failed: 'error',
-    after: 'after',
-    tokensWord: 'tokens',
-    agentsCount: 'agents',
-    isRunning: 'running',
-    isFinished: 'finished',
-    isPlanned: 'planned',
-    opened: 'Agents panel opened.',
-    closed: 'Agents panel closed.',
-    done: 'Done',
-    plan: 'Plan',
-    design: 'Design',
-    tasks: 'Tasks',
-    review: 'Review',
-    busy: 'running',
-    calls: (n: number) => `${n} ${n === 1 ? 'call' : 'calls'}`,
-    ago: 'ago',
-    units: ['s', 'm', 'h'],
-  },
-  ru: {
-    pane: 'Агенты',
-    cost: 'Стоимость',
-    tokens: 'Токены',
-    time: 'Время',
-    collapse: 'Свернуть',
-    expand: 'Развернуть',
-    running: 'Работают',
-    finished: 'Завершены',
-    planned: 'Запланированы',
-    empty: 'Субагентов пока нет.',
-    round: 'раунд',
-    failed: 'ошибка',
-    after: 'после',
-    tokensWord: 'токенов',
-    agentsCount: 'агентов',
-    isRunning: 'работает',
-    isFinished: 'завершён',
-    isPlanned: 'запланирована',
-    opened: 'Панель агентов открыта.',
-    closed: 'Панель агентов закрыта.',
-    done: 'Готово',
-    plan: 'План',
-    design: 'Дизайн',
-    tasks: 'Задачи',
-    review: 'Ревью',
-    busy: 'в работе',
-    calls: (n: number) => {
-      const d = n % 10
-      const dd = n % 100
-      const word = d === 1 && dd !== 11 ? 'вызов' : d >= 2 && d <= 4 && (dd < 12 || dd > 14) ? 'вызова' : 'вызовов'
-      return `${n} ${word}`
-    },
-    ago: 'назад',
-    units: ['с', 'м', 'ч'],
-  },
+const TEXT = {
+  pane: 'Agents',
+  cost: 'Cost',
+  tokens: 'Tokens',
+  time: 'Time',
+  collapse: 'Collapse',
+  expand: 'Expand',
+  running: 'Running',
+  finished: 'Finished',
+  planned: 'Planned',
+  empty: 'No subagents yet.',
+  round: 'round',
+  failed: 'error',
+  after: 'after',
+  tokensWord: 'tokens',
+  agentsCount: 'agents',
+  isRunning: 'running',
+  isFinished: 'finished',
+  isPlanned: 'planned',
+  opened: 'Agents panel opened.',
+  closed: 'Agents panel closed.',
+  done: 'Done',
+  plan: 'Plan',
+  design: 'Design',
+  tasks: 'Tasks',
+  review: 'Review',
+  busy: 'running',
+  calls: (n: number) => `${n} ${n === 1 ? 'call' : 'calls'}`,
+  ago: 'ago',
+  units: ['s', 'm', 'h'],
 } as const
-
-// Module scope is fine here: session.start sets it again on every (re)load.
-let lang: Lang = 'en'
-const tr = () => STRINGS[lang]
-
-const isRussian = (v: unknown): boolean => typeof v === 'string' && /^(ru|russian|рус)/i.test(v.trim())
-
-async function detectLang($: EngineInterface, option: unknown): Promise<Lang> {
-  if (option === 'en' || option === 'ru') return option
-  try {
-    const settings = (await $.settings.read()) as Record<string, unknown>
-    if (typeof settings.language === 'string' && settings.language.trim()) return isRussian(settings.language) ? 'ru' : 'en'
-  } catch {
-    // No settings: fall through to the locale.
-  }
-  const locale = (await $.env.get('LC_ALL')) || (await $.env.get('LC_MESSAGES')) || (await $.env.get('LANG'))
-  return isRussian(locale) ? 'ru' : 'en'
-}
 
 const blank = (): Flow => ({
   title: 'autobots',
@@ -162,12 +100,11 @@ const merge = (prev: Flow | null, input: ProgressInput): Flow => {
 }
 
 const label = (f: Flow): string => {
-  const s = tr()
-  if (f.isFinished) return s.done
-  if (f.phase === 'plan') return s.plan
-  if (f.phase === 'design') return s.design
-  const count = f.total ? `${f.done}/${f.total}` : `${f.running} ${s.busy}`
-  return `${f.phase === 'review' ? s.review : s.tasks} ${count}`
+  if (f.isFinished) return TEXT.done
+  if (f.phase === 'plan') return TEXT.plan
+  if (f.phase === 'design') return TEXT.design
+  const count = f.total ? `${f.done}/${f.total}` : `${f.running} ${TEXT.busy}`
+  return `${f.phase === 'review' ? TEXT.review : TEXT.tasks} ${count}`
 }
 
 const ratio = (f: Flow): number => (f.isFinished ? 1 : f.total ? f.done / f.total : 0)
@@ -198,7 +135,7 @@ const clip = (s: string, max: number): string => {
 
 // Rough advance of system UI text, in em; good enough to size the title's slot.
 const charEm = (ch: string): number =>
-  /[\s.,:;'|!il1()[\]]/.test(ch) ? 0.3 : /[A-ZА-ЯЁmwшщжюМШЩЖЮ@%]/.test(ch) ? 0.72 : 0.56
+  /[\s.,:;'|!il1()[\]]/.test(ch) ? 0.3 : /[A-Zmw@%]/.test(ch) ? 0.72 : 0.56
 
 const textWidth = (s: string, size: number): number => [...s].reduce((w, ch) => w + charEm(ch) * size, 0)
 
@@ -481,7 +418,7 @@ const summarizeTool = (name: string, input: unknown): string => {
 }
 
 const fmtAge = (ms: number): string => {
-  const [sec, min, hr] = tr().units
+  const [sec, min, hr] = TEXT.units
   const s = Math.max(0, Math.floor(ms / 1000))
   if (s < 60) return `${s}${sec}`
   const m = Math.floor(s / 60)
@@ -492,8 +429,8 @@ const fmtAge = (ms: number): string => {
 // how long ago its last step was, only while it runs.
 const activityOf = (a: AgentRun, at: number): string => {
   if (!a.toolCalls) return ''
-  const parts = [tr().calls(a.toolCalls), a.lastTool ?? '']
-  if (a.status === 'running' && a.lastStepAt !== undefined) parts.push(`${fmtAge(at - a.lastStepAt)} ${tr().ago}`)
+  const parts = [TEXT.calls(a.toolCalls), a.lastTool ?? '']
+  if (a.status === 'running' && a.lastStepAt !== undefined) parts.push(`${fmtAge(at - a.lastStepAt)} ${TEXT.ago}`)
   return parts.filter(Boolean).join(' · ')
 }
 
@@ -745,7 +682,6 @@ const svg = (W: number, H: number, body: string): string =>
 
 // The pane's own title already says "Agents": the header names the flow, if any.
 const headerSvg = (W: number, title: string, t: ReturnType<typeof totals>): string => {
-  const s = tr()
   const gap = 6
   const tw = (W - gap * 2) / 3
   const top = title ? 28 : 0
@@ -757,7 +693,7 @@ const headerSvg = (W: number, title: string, t: ReturnType<typeof totals>): stri
     W,
     headerHeight(title),
     `${title ? `<text class="t" x="0" y="15" font-family="${FONT}" font-size="14" font-weight="600">${xml(fitText(title, 14, W))}</text>` : ''}
-${tile(0, s.cost, '≈' + fmtCost(t.cost))}${tile(1, s.tokens, fmtTokens(t.tokens))}${tile(2, s.time, fmtTime(t.time))}`,
+${tile(0, TEXT.cost, '≈' + fmtCost(t.cost))}${tile(1, TEXT.tokens, fmtTokens(t.tokens))}${tile(2, TEXT.time, fmtTime(t.time))}`,
   )
 }
 
@@ -769,14 +705,13 @@ const progressOf = (a: AgentRun): number | null => (a.status === 'done' ? 1 : nu
 const ctxOf = (a: AgentRun): number => (a.contextMax ? Math.min(100, Math.round((a.contextTokens / a.contextMax) * 100)) : 0)
 
 const agentSvg = (W: number, a: AgentRun, at: number): string => {
-  const s = tr()
   const role = roleOf(a.type)
   const color = colorOf(role)
   const ctx = ctxOf(a)
   const textW = W - 42 - 22
   const meta = [a.effort ? `${modelName(a.model)} · ${a.effort}` : modelName(a.model)]
-  if (a.round > 1) meta.push(`${s.round} ${a.round}`)
-  if (a.status === 'failed') meta.push(s.failed)
+  if (a.round > 1) meta.push(`${TEXT.round} ${a.round}`)
+  if (a.status === 'failed') meta.push(TEXT.failed)
   const barW = textW
   const progress = progressOf(a)
   const stats = `ctx ${ctx}% · ${fmtTokens(a.contextTokens)}  ≈${fmtCost(a.costUsd)}  ${fmtTime(elapsed(a, at))}`
@@ -803,7 +738,7 @@ const plannedSvg = (W: number, p: Planned): string => {
   const color = colorOf(role)
   const textW = W - 42 - 22
   const meta: string[] = []
-  if (p.after.length) meta.push(`${tr().after} ${p.after.join(', ')}`)
+  if (p.after.length) meta.push(`${TEXT.after} ${p.after.join(', ')}`)
   return svg(
     W,
     46,
@@ -855,7 +790,7 @@ async function togglePane($: EngineInterface): Promise<boolean> {
   }
   const at = await $.clock.now()
   await update($, now, () => at)
-  await $.ui.open({ id: PANE, title: tr().pane })
+  await $.ui.open({ id: PANE, title: TEXT.pane })
   return true
 }
 
@@ -863,13 +798,12 @@ async function autoOpen($: EngineInterface, key: string): Promise<void> {
   const p = await read($, panel)
   if (p.autoOpenedFor === key) return
   await update($, panel, prev => ({ ...prev, autoOpenedFor: key }))
-  void $.ui.open({ id: PANE, title: tr().pane })
+  void $.ui.open({ id: PANE, title: TEXT.pane })
 }
 
-export const register: Register = (on, options) => {
+export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const started = await next(e)
-    lang = await detectLang($, options.language)
     await $.tool.register({
       name: 'progress',
       description:
@@ -920,7 +854,7 @@ export const register: Register = (on, options) => {
 
   on('command.run', { command: 'agents-info' }, async $ => {
     const isOpen = await togglePane($)
-    return { text: isOpen ? tr().opened : tr().closed }
+    return { text: isOpen ? TEXT.opened : TEXT.closed }
   })
 
   on('tool.call', { tool: TOOL }, async ($, e) => {
@@ -1062,7 +996,6 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const s = tr()
     const ui = $.ui.resolve(e)
     const { Box, Text, Button } = ui
     const list = await read($, agents)
@@ -1082,7 +1015,7 @@ export const register: Register = (on, options) => {
     const toggleCompact = (
       <Button
         key="compact"
-        label={p.isCompact ? s.expand : s.collapse}
+        label={p.isCompact ? TEXT.expand : TEXT.collapse}
         plain
         onPress={() => update($, panel, prev => ({ ...prev, isCompact: !prev.isCompact }))}
       />
@@ -1090,13 +1023,13 @@ export const register: Register = (on, options) => {
     const toggleDone = (
       <Button
         key="done"
-        label={`${p.isDoneCollapsed ? '▸' : '▾'} ${s.finished} · ${finished.length}`}
+        label={`${p.isDoneCollapsed ? '▸' : '▾'} ${TEXT.finished} · ${finished.length}`}
         plain
         onPress={() => update($, panel, prev => ({ ...prev, isDoneCollapsed: !prev.isDoneCollapsed }))}
       />
     )
     const isEmpty = list.length === 0 && planned.length === 0
-    const summary = `≈${fmtCost(t.cost)}, ${fmtTokens(t.tokens)} ${s.tokensWord}, ${fmtTime(t.time)}`
+    const summary = `≈${fmtCost(t.cost)}, ${fmtTokens(t.tokens)} ${TEXT.tokensWord}, ${fmtTime(t.time)}`
 
     if (e.surface === 'desktop' && 'Svg' in ui) {
       const { Svg } = ui
@@ -1114,7 +1047,7 @@ export const register: Register = (on, options) => {
       if (p.isCompact) {
         return (
           <Box flexDirection="column" gap={1}>
-            <Svg source={compactSvg(W, [...running, ...finished], planned, t)} alt={`${list.length} ${s.agentsCount}, ${summary}`} width={W} height={32} />
+            <Svg source={compactSvg(W, [...running, ...finished], planned, t)} alt={`${list.length} ${TEXT.agentsCount}, ${summary}`} width={W} height={32} />
             {toggleCompact}
           </Box>
         )
@@ -1123,19 +1056,19 @@ export const register: Register = (on, options) => {
         <Box flexDirection="column">
           <Svg source={headerSvg(W, title, t)} alt={title ? `${title}: ${summary}` : summary} width={W} height={headerHeight(title)} />
           {toggleCompact}
-          {isEmpty && <Text dimColor>{s.empty}</Text>}
-          {running.length > 0 && section('h-run', `${s.running} · ${running.length}`)}
+          {isEmpty && <Text dimColor>{TEXT.empty}</Text>}
+          {running.length > 0 && section('h-run', `${TEXT.running} · ${running.length}`)}
           {running.map(a => (
-            <Svg key={a.id} source={agentSvg(W, a, at)} alt={withActivity(`${a.description}: ${modelName(a.model)}, ${s.isRunning}`, a, at)} width={W} height={66} />
+            <Svg key={a.id} source={agentSvg(W, a, at)} alt={withActivity(`${a.description}: ${modelName(a.model)}, ${TEXT.isRunning}`, a, at)} width={W} height={66} />
           ))}
           {finished.length > 0 && toggleDone}
           {!p.isDoneCollapsed &&
             finished.map(a => (
-              <Svg key={a.id} source={agentSvg(W, a, at)} alt={withActivity(`${a.description}: ${modelName(a.model)}, ${s.isFinished}`, a, at)} width={W} height={66} />
+              <Svg key={a.id} source={agentSvg(W, a, at)} alt={withActivity(`${a.description}: ${modelName(a.model)}, ${TEXT.isFinished}`, a, at)} width={W} height={66} />
             ))}
-          {planned.length > 0 && section('h-plan', `${s.planned} · ${planned.length}`)}
+          {planned.length > 0 && section('h-plan', `${TEXT.planned} · ${planned.length}`)}
           {planned.map(pl => (
-            <Svg key={`plan-${pl.n}`} source={plannedSvg(W, pl)} alt={`${pl.n}. ${pl.title}: ${s.isPlanned}`} width={W} height={46} />
+            <Svg key={`plan-${pl.n}`} source={plannedSvg(W, pl)} alt={`${pl.n}. ${pl.title}: ${TEXT.isPlanned}`} width={W} height={46} />
           ))}
         </Box>
       )
@@ -1178,7 +1111,7 @@ export const register: Register = (on, options) => {
                 <Text dimColor>
                   {'  '}
                   {model}
-                  {a.round > 1 ? ` · ${s.round} ${a.round}` : ''}
+                  {a.round > 1 ? ` · ${TEXT.round} ${a.round}` : ''}
                 </Text>
               </Text>
               <Box flexDirection="row" justifyContent="space-between" gap={2}>
@@ -1219,13 +1152,13 @@ export const register: Register = (on, options) => {
         </Box>
         {p.isCompact || cols < 42 ? (
           <Text dimColor>
-            ≈{fmtCost(t.cost)} · {fmtTokens(t.tokens)} {s.tokensWord} · {fmtTime(t.time)}
+            ≈{fmtCost(t.cost)} · {fmtTokens(t.tokens)} {TEXT.tokensWord} · {fmtTime(t.time)}
           </Text>
         ) : (
           <Box flexDirection="row" gap={1}>
-            {tile(s.cost, `≈${fmtCost(t.cost)}`)}
-            {tile(s.tokens, fmtTokens(t.tokens))}
-            {tile(s.time, fmtTime(t.time))}
+            {tile(TEXT.cost, `≈${fmtCost(t.cost)}`)}
+            {tile(TEXT.tokens, fmtTokens(t.tokens))}
+            {tile(TEXT.time, fmtTime(t.time))}
           </Box>
         )}
         {p.isCompact ? (
@@ -1240,12 +1173,12 @@ export const register: Register = (on, options) => {
           </Box>
         ) : (
           <Box flexDirection="column" marginTop={1}>
-            {isEmpty && <Text dimColor>{s.empty}</Text>}
-            {running.length > 0 && <Text dimColor>{s.running} · {running.length}</Text>}
+            {isEmpty && <Text dimColor>{TEXT.empty}</Text>}
+            {running.length > 0 && <Text dimColor>{TEXT.running} · {running.length}</Text>}
             {running.map(row)}
             {finished.length > 0 && toggleDone}
             {!p.isDoneCollapsed && finished.map(row)}
-            {planned.length > 0 && <Text dimColor>{s.planned} · {planned.length}</Text>}
+            {planned.length > 0 && <Text dimColor>{TEXT.planned} · {planned.length}</Text>}
             {planned.map(pl => {
               const role = roleOf(pl.role)
               return (
@@ -1258,7 +1191,7 @@ export const register: Register = (on, options) => {
                       </Text>
                       <Text dimColor wrap="truncate-end">
                         <Text color={colorOf(role)}>{role}</Text>
-                        {pl.after.length ? ` · ${s.after} ${pl.after.join(', ')}` : ''}
+                        {pl.after.length ? ` · ${TEXT.after} ${pl.after.join(', ')}` : ''}
                       </Text>
                     </Box>
                   </Box>
