@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Register, TurnStepResult } from 'claude-code'
 
-import type { AgentRun, Flow, Panel, Phase, PlannedTask } from '../types'
+import type { AgentRun, CacheStats, CacheStep, Flow, Panel, Phase, PlannedTask } from '../types'
 
 const flow = atom({ plugin: 'autobots-progress', key: 'flow' } as const, null)
 const agents = atom({ plugin: 'autobots-progress', key: 'agents' } as const, [])
@@ -458,6 +458,73 @@ const activityOf = (a: AgentRun, at: number): string => {
   return parts.filter(Boolean).join(' · ')
 }
 
+// --- the prompt cache, observed from each agent's steps: hit rate, warmth and rebuilds.
+
+// Subagents write with the 5-minute TTL; the engine's usage does not say which TTL a write used.
+const TTL = 5 * 60_000
+// A read this far below the previous step's read plus write: the cached prefix was written again.
+const REBUILD_SLACK = 1024
+// The most bars the desktop strip draws, and so the most steps an agent keeps bars for.
+const STRIP_BARS = 80
+
+// A step's bar on the strip. Bars are kept packed, `read,write` or `read,write,rebuiltAfter`, space
+// separated: the state layer's write cost grows with nested values, and the agents list is written on
+// every step. Measured on the R15 spec test (2000 steps, 5 s timeout): ~3 s packed, ~7 s (failing) as
+// tuples. Re-measure before unpacking.
+type Bar = Pick<CacheStep, 'read' | 'write' | 'rebuiltAfter'>
+const packBar = (s: Bar): string => [s.read, s.write, ...(s.rebuiltAfter === undefined ? [] : [s.rebuiltAfter])].join(',')
+const barsOf = (c: CacheStats | undefined): Bar[] =>
+  (c?.bars ? c.bars.split(' ') : []).map(b => {
+    const [read = 0, write = 0, rebuiltAfter] = b.split(',').map(Number)
+    return rebuiltAfter === undefined ? { read, write } : { read, write, rebuiltAfter }
+  })
+
+// The agent's cache stats with one more step. A rebuild is judged against the step before, on the same model.
+const withStep = (c: CacheStats | undefined, s: CacheStep): CacheStats => {
+  const prev = c?.last
+  const isRebuild = !!prev && prev.model === s.model && s.read < prev.read + prev.write - REBUILD_SLACK
+  const last = isRebuild ? { ...s, rebuiltAfter: s.at - prev.at } : s
+  return {
+    read: (c?.read ?? 0) + s.read,
+    write: (c?.write ?? 0) + s.write,
+    input: (c?.input ?? 0) + s.input,
+    last,
+    bars: [...(c?.bars ? c.bars.split(' ') : []), packBar(last)].slice(-STRIP_BARS).join(' '),
+  }
+}
+
+// Time since the agent's last step: 0 while a step is in progress, undefined before its first.
+const cacheAge = (a: AgentRun, at: number): number | undefined => {
+  const last = a.cache?.last
+  if (!last) return undefined
+  return a.stepStartedAt !== undefined ? 0 : Math.max(0, at - last.at)
+}
+
+const isWarm = (a: AgentRun, at: number): boolean => (cacheAge(a, at) ?? TTL) < TTL
+
+// `cache N% · warm m:ss`, counting down, or `cache N% · cold`; nothing before the first step.
+const cacheText = (a: AgentRun, at: number): string => {
+  const age = cacheAge(a, at)
+  if (!a.cache || age === undefined) return ''
+  const { read, write, input } = a.cache
+  const rate = `cache ${read ? Math.round((read / (read + write + input)) * 100) : 0}%`
+  return age < TTL ? `${rate} · warm ${fmtTime(Math.ceil((TTL - age) / 1000) * 1000)}` : `${rate} · cold`
+}
+
+// A crab's cache temperature: faded toward grey from 0 to 1 over the TTL, frosted once cold, and
+// steaming while a running agent's latest step is a rebuild.
+type Temp = { fade: number; isCold: boolean; isSteaming: boolean }
+const NO_TEMP: Temp = { fade: 0, isCold: false, isSteaming: false }
+// The fade moves in 5-second steps: steady to the eye, and few enough terminal images to keep.
+const FADES = 60
+
+const tempOf = (a: AgentRun, at: number): Temp => {
+  const age = cacheAge(a, at)
+  if (age === undefined) return NO_TEMP
+  const isSteaming = a.status === 'running' && a.cache?.last.rebuiltAfter !== undefined
+  return age < TTL ? { fade: Math.floor((age / TTL) * FADES) / FADES, isCold: false, isSteaming } : { fade: 1, isCold: true, isSteaming }
+}
+
 type Planned = PlannedTask & { n: number }
 
 const plannedOf = (f: Flow | null, list: AgentRun[]): Planned[] => {
@@ -530,7 +597,9 @@ const CRAB_CSS = `<style>
 .c-fast-coding-worker.run .star,.c-edge-case-analyst.run .star,.c-helper-worker.run .star{animation:blink .5s steps(1) infinite -.25s}
 .c-explore.run .it,.c-qa-engineer.run .it{transform-origin:50% 100%;animation:fence .5s ease-in-out infinite}
 @keyframes fence{50%{transform:rotate(25deg)}}
-@media (prefers-reduced-motion: reduce){.run,.run g{animation:none!important}}
+.steam{animation:puff 1s ease-out infinite}@keyframes puff{100%{transform:translateY(-2px);opacity:.3}}
+.snow{animation:blink 1s steps(1) infinite}
+@media (prefers-reduced-motion: reduce){.run,.run g,.steam,.snow{animation:none!important}}
 </style>`
 
 // One costume per role, keyed by its name, plus `explore`; anything else is the plain crab.
@@ -626,12 +695,12 @@ type Rect = [x: number, y: number, w: number, h: number, c: string]
 
 // A costume's pixels by group, in paint order: the body (`bd`) first, then each
 // prop, then the leg pairs `la` and `lb`. Both the SVG crab and the terminal's
-// image are painted from this.
-const crabRects = (costume: string): [string, Rect[]][] => {
+// image are painted from this, at the crab's cache temperature.
+const crabRects = (costume: string, temp = NO_TEMP): [string, Rect[]][] => {
   const groups = new Map<string, Rect[]>([['bd', []]])
   const f: Fill = (x, y, w, h, c, cls = 'bd') => {
     if (!groups.has(cls)) groups.set(cls, [])
-    groups.get(cls)?.push([x, y, w, h, c])
+    groups.get(cls)?.push([x, y, w, h, temper(c, temp)])
   }
   const draw = COSTUMES[costume] ?? ((g: Fill) => crabBody(g))
   draw(f, colorOf(costume))
@@ -639,23 +708,57 @@ const crabRects = (costume: string): [string, Rect[]][] => {
   return [...[...groups].filter(([cls]) => !legs.includes(cls)), ...legs.map((cls): [string, Rect[]] => [cls, groups.get(cls) ?? []])]
 }
 
+// Frost: each color mixed toward its own grey by the fade, then, once cold, most of the way to ice.
+const ICE = [200, 226, 255]
+const FROST = 0.6
+
+const temper = (c: string, t: Temp): string => {
+  if (!t.fade && !t.isCold) return c
+  const [r = 0, g = 0, b = 0, a = 1] = rgbaOf(c)
+  const grey = 0.2126 * r + 0.7152 * g + 0.0722 * b
+  const rgb = [r, g, b].map((v, i) => {
+    const faded = v + (grey - v) * t.fade
+    return Math.round(t.isCold ? faded + ((ICE[i] ?? 255) - faded) * FROST : faded)
+  })
+  return `rgba(${rgb.join(',')},${a})`
+}
+
+// Drawn over the crab, its own colors untouched: a puff of steam above the head after a rebuild,
+// a snowflake in the top corner once cold. Groups `steam` and `snow` carry their own motion.
+// The terminal cannot tell a light theme from a dark one, so the steam is a mid grey that holds 3:1
+// against both white and #1f1f1f, outlined darker; it keeps to rows 0-2, clear of every hat.
+const overlayRects = (t: Temp): [string, Rect[]][] => {
+  const out: [string, Rect[]][] = []
+  const add = (cls: string, x: number, y: number, rows: string[], map: Record<string, string>) => {
+    const list: Rect[] = []
+    stamp((px, py, w, h, color) => list.push([px, py, w, h, color]), x, y, rows, map)
+    out.push([cls, list])
+  }
+  if (t.isSteaming) add('steam', 10, 0, ['.ooo.ooo.', 'okkkkkkko', '.ooooooo.'], { k: '#8A8A8A', o: '#4D4D4D' })
+  if (t.isCold) add('snow', 0, 0, ['k.k.k', '.kkk.', 'kkkkk', '.kkk.', 'k.k.k'], { k: '#7FB8F0' })
+  return out
+}
+
 // A planned crab is drawn at this opacity, on both surfaces.
 const DIM = 0.45
 
 // Body and props nest inside `bd` so a prop rides the bob and adds its own motion;
 // legs stay outside it and step on their own.
-const crab = (x: number, y: number, costume: string, dim = false, isWalking = false, scale = CRAB_SCALE): string => {
-  const groups = crabRects(costume)
+// The steam and the snowflake lie over the crab, outside its walk.
+const crab = (x: number, y: number, costume: string, dim = false, isWalking = false, scale = CRAB_SCALE, temp = NO_TEMP): string => {
+  const groups = crabRects(costume, temp)
   const rects = (list: Rect[]) => list.map(([cx, cy, w, h, c]) => `<rect x="${cx}" y="${cy}" width="${w}" height="${h}" fill="${c}"/>`).join('')
   const group = ([cls, list]: [string, Rect[]]) => `<g class="${cls}">${rects(list)}</g>`
   const [[, bd = []] = [], ...props] = groups.slice(0, -2)
   const body = `<g class="bd">${rects(bd)}${props.map(group).join('')}</g>`
-  return `<g transform="translate(${x},${y}) scale(${scale})" opacity="${dim ? DIM : 1}" shape-rendering="crispEdges"><g class="c-${costume}${isWalking ? ' run' : ''}">${body}${groups.slice(-2).map(group).join('')}</g></g>`
+  return `<g transform="translate(${x},${y}) scale(${scale})" opacity="${dim ? DIM : 1}" shape-rendering="crispEdges"><g class="c-${costume}${isWalking ? ' run' : ''}">${body}${groups.slice(-2).map(group).join('')}</g>${overlayRects(temp).map(group).join('')}</g>`
 }
 
 // The terminal's crab: the same pixels as an RGBA image of the 30×28 grid, still.
 const CRAB_GRID = { width: 30, height: 28 }
 const crabImages = new Map<string, { rgba: string; width: number; height: number }>()
+// Each fade level is an image of its own: the oldest drop out past this many.
+const CRAB_IMAGES_MAX = 128
 
 const rgbaOf = (c: string): number[] => {
   const m = /^rgba\(([\d.]+),([\d.]+),([\d.]+),([\d.]+)\)$/.exec(c)
@@ -665,14 +768,14 @@ const rgbaOf = (c: string): number[] => {
   return [0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16)).concat(1)
 }
 
-// One per costume and dimness; a dimmed crab is the whole image at DIM opacity, as the SVG group is.
-const crabImage = (costume: string, dim = false) => {
-  const key = `${costume}:${dim}`
+// One per costume, dimness and temperature; a dimmed crab is the whole image at DIM opacity, as the SVG group is.
+const crabImage = (costume: string, dim = false, temp = NO_TEMP) => {
+  const key = `${costume}:${dim}:${temp.fade}:${temp.isCold}:${temp.isSteaming}`
   const cached = crabImages.get(key)
   if (cached) return cached
   const { width, height } = CRAB_GRID
   const buf = new Float64Array(width * height * 4) // straight RGB 0-255, alpha 0-1
-  for (const [, list] of crabRects(costume)) {
+  for (const [, list] of [...crabRects(costume, temp), ...overlayRects(temp)]) {
     for (const [x, y, w, h, c] of list) {
       const [r = 0, g = 0, b = 0, a = 1] = rgbaOf(c)
       for (let row = Math.max(0, y); row < Math.min(height, y + h); row++) {
@@ -691,6 +794,7 @@ const crabImage = (costume: string, dim = false) => {
   const bytes = Uint8Array.from(buf, (v, i) => (i % 4 === 3 ? Math.round(Math.round(v * 255) * (dim ? DIM : 1)) : Math.round(v)))
   const image = { rgba: btoa(String.fromCharCode(...bytes)), width, height }
   crabImages.set(key, image)
+  if (crabImages.size > CRAB_IMAGES_MAX) crabImages.delete(crabImages.keys().next().value ?? key)
   return image
 }
 
@@ -728,6 +832,36 @@ const progressOf = (a: AgentRun): number | null => (a.status === 'done' ? 1 : nu
 
 const ctxOf = (a: AgentRun): number => (a.contextMax ? Math.min(100, Math.round((a.contextTokens / a.contextMax) * 100)) : 0)
 
+// The cache strip: one bar per step, oldest first, ending at `right` on the baseline `bottom`. Each bar
+// is the step's cache read, solid, under its cache write, faint, scaled to the largest bar shown. A
+// rebuild's bar is solid clay, and hovering anywhere in its column of the strip says how long the cache
+// sat and what it rewrote.
+const STRIP_PITCH = 3
+const STRIP_H = 10
+const STRIP_W = STRIP_BARS * STRIP_PITCH
+
+const stripSvg = (steps: Bar[], right: number, width: number, bottom: number, color: string): string => {
+  const fit = Math.floor(width / STRIP_PITCH)
+  const shown = fit > 0 ? steps.slice(-fit) : []
+  const top = Math.max(1, ...shown.map(s => s.read + s.write))
+  const px = (v: number) => Math.round(v * 100) / 100
+  const x0 = right - shown.length * STRIP_PITCH
+  return shown
+    .map((s, i) => {
+      const x = x0 + i * STRIP_PITCH
+      const readH = px((STRIP_H * s.read) / top)
+      const writeH = px((STRIP_H * s.write) / top)
+      const bar = (c: string, writeOpacity: number) =>
+        (readH ? `<rect x="${x}" y="${px(bottom - readH)}" width="2" height="${readH}" fill="${c}"/>` : '') +
+        (writeH ? `<rect x="${x}" y="${px(bottom - readH - writeH)}" width="2" height="${writeH}" fill="${c}"${writeOpacity < 1 ? ` fill-opacity="${writeOpacity}"` : ''}/>` : '')
+      if (s.rebuiltAfter === undefined) return bar(color, 0.35)
+      const hover = `rebuilt after ${(s.rebuiltAfter / 60_000).toFixed(1)} min: ${fmtTokens(s.write)} tokens rewritten`
+      const target = `<rect x="${x}" y="${bottom - STRIP_H}" width="${STRIP_PITCH}" height="${STRIP_H}" fill="none" pointer-events="all"/>`
+      return `<g><title>${xml(hover)}</title>${bar(CLAY, 1)}${target}</g>`
+    })
+    .join('')
+}
+
 const agentSvg = (W: number, a: AgentRun, at: number): string => {
   const role = roleOf(a.type)
   const color = colorOf(role)
@@ -738,17 +872,22 @@ const agentSvg = (W: number, a: AgentRun, at: number): string => {
   if (a.status === 'failed') meta.push(TEXT.failed)
   const barW = textW
   const progress = progressOf(a)
-  const stats = `ctx ${ctx}% · ${fmtTokens(a.contextTokens)}  ≈${fmtCost(a.costUsd)}  ${fmtTime(elapsed(a, at))}`
+  const cache = cacheText(a, at)
+  const stats = `ctx ${ctx}% · ${fmtTokens(a.contextTokens)}  ≈${fmtCost(a.costUsd)}  ${fmtTime(elapsed(a, at))}${cache ? `  ${cache}` : ''}`
   const activity = activityOf(a, at)
   const activityW = Math.max(0, barW - textWidth(stats, 11) - 12)
+  const roleText = role === 'other' ? a.type : role
+  // The strip sits right of the role and model line, in what that line leaves.
+  const stripW = Math.min(STRIP_W, barW - textWidth(`${roleText}  ${meta.join('  ·  ')}`, 11) - 16)
   // A running agent's bar is its context fill, drawn grey.
   const fillW = Math.round(barW * (progress ?? ctx / 100))
   return svg(
     W,
     66,
-    `${crab(0, 14, costumeOf(a.type), false, a.status === 'running')}
+    `${crab(0, 14, costumeOf(a.type), false, a.status === 'running', CRAB_SCALE, tempOf(a, at))}
 <text class="t" x="42" y="18" font-family="${FONT}" font-size="13" font-weight="600">${xml(fitText(a.description || a.type, 13, textW))}</text>
-<text x="42" y="34" font-family="${FONT}" font-size="11"><tspan fill="${color}">${xml(role === 'other' ? a.type : role)}</tspan><tspan class="s">  ${xml(meta.join('  ·  '))}</tspan></text>
+<text x="42" y="34" font-family="${FONT}" font-size="11"><tspan fill="${color}">${xml(roleText)}</tspan><tspan class="s">  ${xml(meta.join('  ·  '))}</tspan></text>
+${stripSvg(barsOf(a.cache), 42 + barW, stripW, 37, color)}
 ${activity && activityW > 30 ? `<text class="t" x="42" y="49" font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${xml(fitText(activity, 11, activityW))}</text>` : ''}
 <text class="s" x="${42 + barW}" y="49" text-anchor="end" font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${stats}</text>
 <rect class="k" x="42" y="55" width="${barW}" height="4" rx="2"/><rect${progress === null ? ' class="m"' : ''} x="42" y="55" width="${fillW}" height="4" rx="2"${progress === null ? '' : ` fill="${color}"`}/>
@@ -804,6 +943,20 @@ const ctxBar = (pct: number, width: number): string => {
 }
 
 const STATUS_GLYPH: Record<string, string> = { running: '●', done: '✓', failed: '✗', planned: '◷' }
+
+// The fewest cells of an activity summary worth showing beside the cache text.
+const ACTIVITY_MIN = 12
+
+// A terminal row's stats line, with the cache text when it fits, and its activity in the room left
+// across the gap of 2. Too narrow for all of it: the activity is cut short, then drops, then the cache
+// text does; a row with no cache text keeps its activity, cut short.
+const fitRow = (stats: string, cache: string, activity: string, lineW: number) => {
+  if (!cache) return { statsText: stats, activity }
+  const statsText = `${stats} · ${cache}`
+  const room = lineW - [...statsText].length
+  if (room < 0) return { statsText: stats, activity: '' }
+  return { statsText, activity: room - 2 >= Math.min(ACTIVITY_MIN, [...activity].length) ? clip(activity, room - 2) : '' }
+}
 
 // ---------------------------------------------------------------------------
 // Autobots Mode: which of the main agent's tool calls are direct edits of project files.
@@ -1020,6 +1173,10 @@ const isBashWrite = (at: Places, command: string): boolean => {
   return endCommand()
 }
 
+// Marks an agent's model step as out since `at`, or, given undefined, no longer out.
+const markStep = ($: EngineInterface, agentId: string, at: number | undefined) =>
+  update($, agents, list => list.map(a => (a.agentId === agentId ? { ...a, stepStartedAt: at } : a)))
+
 // Opens the agents pane, or closes it when it is up; true when it ends up open.
 async function togglePane($: EngineInterface): Promise<boolean> {
   const isOpen = (await $.ui.panes()).some(p => p.id === PANE)
@@ -1087,11 +1244,12 @@ export const register: Register = on => {
       description: 'Show or hide the panel of subagents: running, finished and planned, with model, context, cost and time',
     })
 
-    // Ticks the running agents' clocks; quiet when nothing runs.
+    // Ticks the running agents' clocks, and the cache countdown of any agent shown warm, finished
+    // ones too, up to the tick that shows it cold; quiet once nothing runs or is warm.
     $.clock.every(1000, () => {
       void (async () => {
-        const list = await read($, agents)
-        if (!list.some(a => a.status === 'running')) return
+        const [list, shownAt] = await Promise.all([read($, agents), read($, now)])
+        if (!list.some(a => a.status === 'running' || isWarm(a, shownAt))) return
         const at = await $.clock.now()
         await update($, now, () => at)
       })()
@@ -1202,10 +1360,18 @@ export const register: Register = on => {
     return started
   })
 
-  // Each model request of a subagent: live context, tokens and cost, and its tool calls.
+  // Each model request of a subagent: live context, tokens and cost, its tool calls and its cache.
+  // While the request is out, the agent's cache counts as warm.
   on('turn.step', async function* ($, e, next) {
-    const result = yield* next(e)
     const agentId = e.agentId
+    if (agentId) await markStep($, agentId, await $.clock.now())
+    let result: TurnStepResult | undefined
+    try {
+      result = yield* next(e)
+    } finally {
+      // A request that failed, was abandoned or reported no usage is no longer out.
+      if (agentId && !result?.usage) await markStep($, agentId, undefined)
+    }
     const usage = result.usage
     if (!agentId || !usage) return result
 
@@ -1214,6 +1380,13 @@ export const register: Register = on => {
     const uses = result.toolUses.filter(u => u.name !== 'SubagentHandback')
     const last = uses[uses.length - 1]
     const at = await $.clock.now()
+    const step: CacheStep = {
+      read: usage.cache_read_input_tokens || 0,
+      write: usage.cache_creation_input_tokens || 0,
+      input: usage.input_tokens || 0,
+      model,
+      at,
+    }
     await update($, agents, list =>
       list.map(a =>
         a.agentId !== agentId
@@ -1224,6 +1397,8 @@ export const register: Register = on => {
               effort: typeof e.effort === 'string' ? e.effort : a.effort,
               status: 'running',
               endedAt: undefined,
+              stepStartedAt: undefined,
+              cache: withStep(a.cache, step),
               contextTokens:
                 (usage.input_tokens || 0) +
                 (usage.cache_read_input_tokens || 0) +
@@ -1260,6 +1435,8 @@ export const register: Register = on => {
             ...a,
             status: e.reason === 'answer' ? 'done' : 'failed',
             endedAt: at,
+            // A step abandoned across a reload never cleared its mark.
+            stepStartedAt: undefined,
             ...(fallback && e.usage
               ? {
                   model: e.usage.model || a.model,
@@ -1288,7 +1465,7 @@ export const register: Register = on => {
     const at = Math.max(await read($, now), ...list.map(a => a.startedAt), 0)
 
     // Rows show descriptions masked; `list` stays raw, so planned tasks match runs exactly.
-    const shown = list.map(a => ({ ...a, description: maskSecrets(a.description) }))
+    const shown = list.map(a => ({ ...a, description: maskSecrets(a.description), }))
     const running = shown.filter(a => a.status === 'running').reverse()
     const finished = shown.filter(a => a.status !== 'running').reverse()
     const planned = plannedOf(f, list)
@@ -1320,10 +1497,8 @@ export const register: Register = on => {
     if (e.surface === 'desktop' && 'Svg' in ui) {
       const { Svg } = ui
       const W = Math.max(240, Math.min(900, (e.props.bodyColumns || 40) * 8 - 8))
-      const withActivity = (text: string, a: AgentRun, at: number): string => {
-        const activity = activityOf(a, at)
-        return activity ? `${text}, ${activity}` : text
-      }
+      const withActivity = (text: string, a: AgentRun, at: number): string =>
+        [text, activityOf(a, at), cacheText(a, at)].filter(Boolean).join(', ')
       const section = (key: string, text: string) => (
         <Text key={key} dimColor>
           {text}
@@ -1370,9 +1545,10 @@ export const register: Register = on => {
     // One element per row: a shared instance would be one node in several places.
     const rule = () => <Text dimColor wrap="truncate-end">{'─'.repeat(cols)}</Text>
     // ▣ a run's crab, ▢ a planned task's, dimmed.
-    const crabCell = (key: string, costume: string, color: string, dim = false) =>
+    // Without images the glyph shows no cache temperature: the row's text does.
+    const crabCell = (key: string, costume: string, color: string, dim = false, temp = NO_TEMP) =>
       'Image' in ui ? (
-        <ui.Image key={key} source={crabImage(costume, dim)} columns={crabCols} rows={3} alt={dim ? '▢' : '▣'} />
+        <ui.Image key={key} source={crabImage(costume, dim, temp)} columns={crabCols} rows={3} alt={dim ? '▢' : '▣'} />
       ) : (
         <Text color={color}>{dim ? '▢' : '▣'}</Text>
       )
@@ -1383,10 +1559,12 @@ export const register: Register = on => {
       const progress = progressOf(a)
       const model = a.effort ? `${modelName(a.model)} · ${a.effort}` : modelName(a.model)
       const activity = activityOf(a, at)
+      const stats = `ctx ${ctx}% · ${fmtTokens(a.contextTokens)} ≈${fmtCost(a.costUsd)} ${fmtTime(elapsed(a, at))}`
+      const fit = fitRow(stats, cacheText(a, at), activity, cols - crabCols - 1)
       return (
         <Box key={a.id} flexDirection="column">
           <Box flexDirection="row" gap={1}>
-            {crabCell(`crab-${a.id}`, costumeOf(a.type), color)}
+            {crabCell(`crab-${a.id}`, costumeOf(a.type), color, false, tempOf(a, at))}
             <Box flexDirection="column" flexGrow={1}>
               <Box flexDirection="row" justifyContent="space-between" gap={1}>
                 <Text bold wrap="truncate-end">
@@ -1403,9 +1581,9 @@ export const register: Register = on => {
                 </Text>
               </Text>
               <Box flexDirection="row" justifyContent="space-between" gap={2}>
-                <Text wrap="truncate-end">{activity}</Text>
+                <Text wrap="truncate-end">{fit.activity}</Text>
                 <Text dimColor wrap="truncate-end">
-                  ctx {ctx}% · {fmtTokens(a.contextTokens)} ≈{fmtCost(a.costUsd)} {fmtTime(elapsed(a, at))}
+                  {fit.statsText}
                 </Text>
               </Box>
               {progress === null ? <Text dimColor>{ctxBar(ctx, barW)}</Text> : <Text color={color}>{ctxBar(progress * 100, barW)}</Text>}

@@ -44,6 +44,33 @@ export type AgentRun = {
   toolCalls: number
   lastTool?: string
   lastStepAt?: number
+  // When the model step that is out began; absent between steps.
+  stepStartedAt?: number
+  // The prompt cache, from the agent's steps; absent before its first.
+  cache?: CacheStats
+}
+
+// Sums over every step, for the hit rate; the latest step, for warmth and rebuilds; and the most
+// recent steps' bars for the desktop strip, packed into one string (see `packBar` in the hook): the
+// state layer's write cost grows with nested values, and R15 (2000 steps, 5 s timeout) runs ~3 s packed
+// against ~7 s, failing, as tuples. Re-measure before unpacking.
+export type CacheStats = {
+  read: number
+  write: number
+  input: number
+  last: CacheStep
+  bars: string
+}
+
+export type CacheStep = {
+  read: number
+  write: number
+  input: number
+  model: string
+  // When the step ended.
+  at: number
+  // Present on a rebuild: the time since the step before it ended, in ms.
+  rebuiltAfter?: number
 }
 
 export type Panel = {
