@@ -725,15 +725,17 @@ const temper = (c: string, t: Temp): string => {
 
 // Drawn over the crab, its own colors untouched: a puff of steam above the head after a rebuild,
 // a snowflake in the top corner once cold. Groups `steam` and `snow` carry their own motion.
+// The terminal cannot tell a light theme from a dark one, so the steam is a mid grey that holds 3:1
+// against both white and #1f1f1f, outlined darker; it keeps to rows 0-2, clear of every hat.
 const overlayRects = (t: Temp): [string, Rect[]][] => {
   const out: [string, Rect[]][] = []
-  const add = (cls: string, x: number, y: number, rows: string[], c: string) => {
+  const add = (cls: string, x: number, y: number, rows: string[], map: Record<string, string>) => {
     const list: Rect[] = []
-    stamp((px, py, w, h, color) => list.push([px, py, w, h, color]), x, y, rows, { k: c })
+    stamp((px, py, w, h, color) => list.push([px, py, w, h, color]), x, y, rows, map)
     out.push([cls, list])
   }
-  if (t.isSteaming) add('steam', 11, 0, ['.k..k.k.', 'kkk.kkkk', '.kkkkkk.'], 'rgba(236,238,240,.9)')
-  if (t.isCold) add('snow', 0, 0, ['k.k.k', '.kkk.', 'kkkkk', '.kkk.', 'k.k.k'], '#7FB8F0')
+  if (t.isSteaming) add('steam', 10, 0, ['.ooo.ooo.', 'okkkkkkko', '.ooooooo.'], { k: '#8A8A8A', o: '#4D4D4D' })
+  if (t.isCold) add('snow', 0, 0, ['k.k.k', '.kkk.', 'kkkkk', '.kkk.', 'k.k.k'], { k: '#7FB8F0' })
   return out
 }
 
@@ -832,7 +834,8 @@ const ctxOf = (a: AgentRun): number => (a.contextMax ? Math.min(100, Math.round(
 
 // The cache strip: one bar per step, oldest first, ending at `right` on the baseline `bottom`. Each bar
 // is the step's cache read, solid, under its cache write, faint, scaled to the largest bar shown. A
-// rebuild has a clay mark above its bar and says on hover how long the cache sat and what it rewrote.
+// rebuild's bar is solid clay, and hovering anywhere in its column of the strip says how long the cache
+// sat and what it rewrote.
 const STRIP_PITCH = 3
 const STRIP_H = 10
 const STRIP_W = STRIP_BARS * STRIP_PITCH
@@ -848,12 +851,13 @@ const stripSvg = (steps: Bar[], right: number, width: number, bottom: number, co
       const x = x0 + i * STRIP_PITCH
       const readH = px((STRIP_H * s.read) / top)
       const writeH = px((STRIP_H * s.write) / top)
-      const bar =
-        (readH ? `<rect x="${x}" y="${px(bottom - readH)}" width="2" height="${readH}" fill="${color}"/>` : '') +
-        (writeH ? `<rect x="${x}" y="${px(bottom - readH - writeH)}" width="2" height="${writeH}" fill="${color}" fill-opacity="0.35"/>` : '')
-      if (s.rebuiltAfter === undefined) return bar
+      const bar = (c: string, writeOpacity: number) =>
+        (readH ? `<rect x="${x}" y="${px(bottom - readH)}" width="2" height="${readH}" fill="${c}"/>` : '') +
+        (writeH ? `<rect x="${x}" y="${px(bottom - readH - writeH)}" width="2" height="${writeH}" fill="${c}"${writeOpacity < 1 ? ` fill-opacity="${writeOpacity}"` : ''}/>` : '')
+      if (s.rebuiltAfter === undefined) return bar(color, 0.35)
       const hover = `rebuilt after ${(s.rebuiltAfter / 60_000).toFixed(1)} min: ${fmtTokens(s.write)} tokens rewritten`
-      return `<g><title>${xml(hover)}</title><rect x="${x}" y="${bottom - STRIP_H - 3}" width="2" height="2" fill="${CLAY}"/>${bar}</g>`
+      const target = `<rect x="${x}" y="${bottom - STRIP_H}" width="${STRIP_PITCH}" height="${STRIP_H}" fill="none" pointer-events="all"/>`
+      return `<g><title>${xml(hover)}</title>${bar(CLAY, 1)}${target}</g>`
     })
     .join('')
 }
