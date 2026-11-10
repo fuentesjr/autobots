@@ -341,3 +341,22 @@ move, so they are listed as eval candidates.
 `scripts/test_install.sh` (88/0) pass, as do the Ruby eval tests (`scripts/*_test.rb`) and
 `claude plugin test` on `autobots-progress` (509/0, Claude Code 2.1.322). Not run: the routing
 gate for the `SKILL.md` change.
+
+## Fable 5.2 prompting guide applied to the Fable roles (2026-11-10)
+
+Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-2
+
+Bodies of `planner`, `forensic-analyst`, `reviewer`, `edge-case-analyst`, and `advisor` changed;
+frontmatter (model, effort, tools, description) did not. Each Access clause now gives the reason
+for read-only access, names the commands it covers, says that existing tests and builds may run
+without asking, and tells the role to work through a failed or empty command before reporting it.
+Each role has a new writing section for a reader who has not seen the role's tool calls.
+`reviewer` states its verdict first. `docs/design.md` (Model Mapping) cites the 5.2 guide for the
+`high` starting point and lists what was applied and what did not apply.
+
+These changes come from the guide, not from an observed Autobots failure, and no role eval was
+run after them. `SKILL.md` and the eval scripts are untouched, so no harness approval is voided.
+
+**Verification:** `go run ./scripts/validate_package.go`, `go test ./...`, `go vet ./...`,
+`scripts/test_install.sh`, the Ruby eval tests (`scripts/*_test.rb`), and `claude plugin test` on
+`autobots-progress`. Not run: any role eval (needs model sessions).
