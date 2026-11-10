@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# Prepares an Amp orb for this repository: Go (validator, go test, go vet),
+# Ruby (eval harness tests), and Claude Code (mod tests, installer version check).
+# Runs once per fresh orb and again on a stale snapshot, so every step checks
+# what is already installed first.
+#
+# The orb's network policy blocks go.dev and the Debian mirrors, so Go comes from
+# the Go module proxy (the source `go` itself downloads toolchains from) and Ruby
+# from ruby/ruby-builder's GitHub releases (the builds actions/setup-ruby uses).
+# Both downloads are pinned by SHA-256.
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+# Keep the Go minor version in step with go.mod and .github/workflows/validate.yml.
+GO_VERSION="1.26.10"
+GO_SHA256="f64ecb0807852be2c98899561c45288a9ad57f4e88f3cd002ffabeccbd03bfe1"
+RUBY_VERSION="3.4.12"
+RUBY_SHA256="8c9b3e501d70a0d742853a5ab9ab0d00ea2c2f4f2c9ca1c00dbcb7163661eb63"
+
+BIN="$HOME/.local/bin" # on PATH in orb login shells
+GO_ROOT="$HOME/.local/share/go-${GO_VERSION}"
+# The prebuilt Ruby has this prefix compiled in, so it must live at this path.
+RUBY_ROOT="/opt/hostedtoolcache/Ruby/${RUBY_VERSION}/x64"
+
+step() { printf '\n== %s (at %ss)\n' "$1" "$SECONDS"; }
+
+fetch() { # fetch <url> <sha256> <dest>
+  curl -fsSL --retry 3 -o "$3" "$1"
+  echo "$2  $3" | sha256sum -c - >/dev/null
+}
+
+if [ "$(uname -m)" != "x86_64" ]; then
+  echo "setup: only x86_64 orbs are supported (found $(uname -m))" >&2
+  exit 1
+fi
+
+mkdir -p "$BIN"
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+
+step "Go ${GO_VERSION}"
+if [ ! -x "$GO_ROOT/bin/go" ]; then
+  module="golang.org/toolchain@v0.0.1-go${GO_VERSION}.linux-amd64"
+  fetch "https://proxy.golang.org/golang.org/toolchain/@v/v0.0.1-go${GO_VERSION}.linux-amd64.zip" "$GO_SHA256" "$tmp/go.zip"
+  unzip -q "$tmp/go.zip" -d "$tmp/go"
+  # Module zips carry no file modes.
+  chmod +x "$tmp/go/$module"/bin/* "$tmp/go/$module"/pkg/tool/*/*
+  rm -rf "$GO_ROOT"
+  mkdir -p "$(dirname "$GO_ROOT")"
+  mv "$tmp/go/$module" "$GO_ROOT"
+fi
+ln -sf "$GO_ROOT/bin/go" "$GO_ROOT/bin/gofmt" "$BIN/"
+"$BIN/go" version
+
+step "Go modules"
+"$BIN/go" mod download
+
+step "Ruby ${RUBY_VERSION}"
+if [ ! -x "$RUBY_ROOT/bin/ruby" ]; then
+  fetch "https://github.com/ruby/ruby-builder/releases/download/ruby-${RUBY_VERSION}/ruby-${RUBY_VERSION}-ubuntu-22.04-x64.tar.gz" "$RUBY_SHA256" "$tmp/ruby.tgz"
+  sudo mkdir -p "$(dirname "$RUBY_ROOT")"
+  sudo chown "$(id -u):$(id -g)" "$(dirname "$RUBY_ROOT")"
+  rm -rf "$RUBY_ROOT"
+  tar -xzf "$tmp/ruby.tgz" -C "$(dirname "$RUBY_ROOT")"
+fi
+for tool in ruby gem bundle rake irb; do
+  ln -sf "$RUBY_ROOT/bin/$tool" "$BIN/$tool"
+done
+"$BIN/ruby" --version
+"$BIN/ruby" -e 'require "minitest"; require "json"; require "digest"'
+
+step "Claude Code"
+if ! command -v claude >/dev/null 2>&1; then
+  npm install -g --prefix "$HOME/.local" --no-fund --no-audit @anthropic-ai/claude-code
+fi
+claude --version
+
+step "done"
