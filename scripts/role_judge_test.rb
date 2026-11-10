@@ -26,11 +26,11 @@ class RoleJudgeTest < Minitest::Test
 
   def test_judge_falls_back_to_result_text_when_structured_output_is_empty
     reply = { "structured_output" => {}, "result" => '{"winner":"tie","reasons":"same"}',
-              "modelUsage" => { "claude-fable-5-1" => {} } }
+              "modelUsage" => { "claude-fable-5-2" => {} } }
     with_fake_claude(reply) do
-      j = RoleJudge.judge_one("task", "a", "b", "claude-fable-5-1")
+      j = RoleJudge.judge_one("task", "a", "b", "claude-fable-5-2")
       assert_equal "tie", j["verdict"]["winner"]
-      assert_equal ["claude-fable-5-1"], j["served"]
+      assert_equal ["claude-fable-5-2"], j["served"]
     end
   end
 
@@ -38,6 +38,12 @@ class RoleJudgeTest < Minitest::Test
     with_fake_claude({ "structured_output" => { "winner" => "b", "reasons" => "" } }) do
       assert_raises(RuntimeError) { RoleJudge.judge_one("task", "a", "b", "m") }
     end
+  end
+
+  def test_other_judges_names_the_models_of_rows_a_different_judge_wrote
+    rows = [{ "judge_model" => ["claude-fable-5-1"] }, { "judge_model" => ["claude-fable-5-2"] }]
+    assert_equal ["claude-fable-5-1"], RoleJudge.other_judges(rows, "claude-fable-5-2")
+    assert_empty RoleJudge.other_judges(rows.last(1), "claude-fable-5-2")
   end
 
   # The local eval data is gitignored, so this runs only where it exists.

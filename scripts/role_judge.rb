@@ -9,7 +9,7 @@
 # passed as untrusted data to a tool-less `claude -p --safe-mode` session.
 #
 # Usage:
-#   role_judge.rb judge [--a baseline] [--b v1] [--model claude-fable-5-1]
+#   role_judge.rb judge [--a baseline] [--b v1] [--model claude-fable-5-2]
 #   role_judge.rb calib --out PATH [--n 10]   # write a blinded page for owner labels
 #   role_judge.rb agree LABELS                # LABELS like "1:X,2:tie,3:Y"
 #   role_judge.rb summary
@@ -98,10 +98,23 @@ module RoleJudge
     { "verdict" => verdict, "served" => (res["modelUsage"] || {}).keys.sort, "usd" => res["total_cost_usd"] }
   end
 
+  # Models that judged earlier rows and are not `model`. Verdicts from two
+  # judges must not share one judge.jsonl: summary tallies them together.
+  def other_judges(rows, model)
+    rows.reject { |r| (r["judge_model"] || []).any? { |m| m.include?(model) } }
+        .flat_map { |r| r["judge_model"] || [] }.uniq.sort
+  end
+
   def cmd_judge(opts)
     abort "role_judge: API credentials in env; runs must bill the subscription" if BILLING_VARS.any? { |v| ENV[v] && !ENV[v].empty? }
     all = cases
-    done = read_jsonl(OUT).map { |r| [r["prompt_id"], r["rep"]] }
+    judged = read_jsonl(OUT)
+    others = other_judges(judged, opts[:model])
+    unless others.empty?
+      abort "role_judge: #{OUT} has rows judged by #{others.join(', ')}, not #{opts[:model]}; " \
+            "pass --model to continue with that judge, or move the file aside to rejudge every pair"
+    end
+    done = judged.map { |r| [r["prompt_id"], r["rep"]] }
     (pairs(opts[:a], opts[:b]) - done).each do |cid, rep|
       va, vb = a_first?(cid, rep, "judge") ? [opts[:a], opts[:b]] : [opts[:b], opts[:a]]
       j = judge_one(task(all, cid), diff(va, cid, rep), diff(vb, cid, rep), opts[:model])
@@ -190,7 +203,7 @@ module RoleJudge
 
   def main(argv)
     cmd = argv.shift
-    opts = { a: "baseline", b: "v1", model: "claude-fable-5-1", n: 10 }
+    opts = { a: "baseline", b: "v1", model: "claude-fable-5-2", n: 10 }
     parser = OptionParser.new do |o|
       o.banner = "usage: role_judge.rb judge|calib|agree|summary [options]"
       o.on("--a VARIANT") { |v| opts[:a] = v }

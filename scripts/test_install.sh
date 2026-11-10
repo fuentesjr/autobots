@@ -505,15 +505,15 @@ run_with_claude_version() { # version
 }
 
 test_claude_version_below_minimum_warns() {
-  printf '\n== claude 2.1.292 (below MIN_CLAUDE_VERSION 2.1.293) warns ==\n'
-  run_with_claude_version "2.1.292"
+  printf '\n== claude 2.1.320 (below MIN_CLAUDE_VERSION 2.1.321) warns ==\n'
+  run_with_claude_version "2.1.320"
   assert_eq "$RUN_EXIT" "0" "install still proceeds on an old claude"
-  assert_contains "$RUN_STDERR" "Claude Code 2.1.292 is older than 2.1.293" "old claude version warning names both versions"
+  assert_contains "$RUN_STDERR" "Claude Code 2.1.320 is older than 2.1.321" "old claude version warning names both versions"
 }
 
 test_claude_version_at_minimum_is_silent() {
-  printf '\n== claude 2.1.293 (at MIN_CLAUDE_VERSION) does not warn ==\n'
-  run_with_claude_version "2.1.293"
+  printf '\n== claude 2.1.321 (at MIN_CLAUDE_VERSION) does not warn ==\n'
+  run_with_claude_version "2.1.321"
   assert_eq "$RUN_EXIT" "0" "install exits 0 on minimum claude"
   assert_not_contains "$RUN_STDERR" "is older than" "no version warning at the minimum"
 }

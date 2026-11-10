@@ -316,3 +316,28 @@ installer; installer warnings exercised with `--dry-run` against a scratch targe
 `claude` reporting 2.1.200 plus `ANTHROPIC_DEFAULT_FABLE_MODEL` set (both fired), and with the
 real 2.1.261 (silent). Not run: `scripts/routing_gate.py` (needs an API key; the only SKILL.md
 routing-relevant text change is the ADV-1 role parenthetical, which no scenario keys on).
+
+## Fable 5.2 and Anthropic's model-selection guide (2026-11-10)
+
+`fable` resolves to Fable 5.2 from Claude Code 2.1.321 (code.claude.com model-config version
+history), so the "resolves to" columns, the MDL-1/INS-6 version, and the installer's
+`MIN_CLAUDE_VERSION` moved from 2.1.293 to 2.1.321. `role_judge.rb`'s default judge
+model is now `claude-fable-5-2`, and `judge` refuses to append to a `judge.jsonl` that a different
+model judged. `review_eval.rb` keeps its `claude-fable-5-1` usage example: the file is in its own
+harness paths, so even a comment edit would void the reviewer flow's approval. Recorded results and the dated 5.1 rationale are unchanged.
+The effort-default note is corrected: Claude Code defaults Fable 5.2 to `medium`, not `high`.
+`autobots-progress` prices Fable 5.2 at $8/$40 (cache read $0.20) and Sonnet 5.5 cache reads at
+$0.10.
+
+The guide (https://claude.dev/blog/which-claude-model-should-you-build-with/) is incorporated as
+a comparison table in `docs/design.md` (Model Mapping), its caution on the advisor pattern in the
+`advisory` section, and two dispatcher rules in `SKILL.md` with a cheatsheet note: the order of
+fixes when a result falls short, and keeping verbose reading off the Fable roles. No role's model
+or effort changed: the guide would start `reviewer`, `forensic-analyst`, and `doc-reviewer` on
+Sonnet at `medium` and the Fable roles at `medium`, but no Autobots measurement supports either
+move, so they are listed as eval candidates.
+
+**Verification:** `go run ./scripts/validate_package.go`, `go test ./...`, `go vet ./...`, and
+`scripts/test_install.sh` (88/0) pass, as do the Ruby eval tests (`scripts/*_test.rb`) and
+`claude plugin test` on `autobots-progress` (509/0, Claude Code 2.1.322). Not run: the routing
+gate for the `SKILL.md` change.

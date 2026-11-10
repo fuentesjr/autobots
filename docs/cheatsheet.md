@@ -81,6 +81,13 @@ An unregistered pattern falls back to the default (with a note).
 > For report-producing roles (`forensic-analyst`, `edge-case-analyst`) the parent
 > saves the report to a file **only when you ask**.
 
+> When a result falls short, the parent first names a check the subagent can run
+> (test, build, script), then re-dispatches with `ultrathink`, then routes a
+> `fast-coding-worker` task to `coding-worker`. A `helper-worker` task is split
+> into narrower questions instead; it goes to `forensic-analyst` only when the
+> question is why something fails. Verbose reading goes to `helper-worker`;
+> Fable roles get its summary.
+
 ### `advisory` loop (parent-mediated)
 
 1. Parent spawns the executor (`coding-worker` or `fast-coding-worker`) with a

@@ -51,18 +51,18 @@ This document is the **normative, buildable contract** for the Autobots package.
 
 `AGT-1` The roster MUST be exactly these eleven roles with exactly these attributes:
 
-| Role | Access | `model` alias | `effort` | Resolves to (Claude Code 2.1.255+) |
+| Role | Access | `model` alias | `effort` | Resolves to (Claude Code 2.1.321+) |
 |---|---|---|---|---|
-| `planner` | read-only | `fable` | `high` | Fable 5.1 |
+| `planner` | read-only | `fable` | `high` | Fable 5.2 |
 | `coding-worker` | writable | `opus` | `medium` | Opus 5.5 |
-| `fast-coding-worker` | writable | `haiku` | `medium` | Haiku 5.5 (Claude Code 2.1.293 or later) |
+| `fast-coding-worker` | writable | `haiku` | `medium` | Haiku 5.5 |
 | `helper-worker` | read-only | `sonnet` | `low` | Sonnet 5.5 |
-| `forensic-analyst` | read-only | `fable` | `high` | Fable 5.1 |
+| `forensic-analyst` | read-only | `fable` | `high` | Fable 5.2 |
 | `doc-reviewer` | read-only | `opus` | `high` | Opus 5.5 |
-| `reviewer` | read-only | `fable` | `high` | Fable 5.1 |
+| `reviewer` | read-only | `fable` | `high` | Fable 5.2 |
 | `qa-engineer` | writable | `opus` | `high` | Opus 5.5 |
-| `edge-case-analyst` | read-only | `fable` | `high` | Fable 5.1 |
-| `advisor` | read-only | `fable` | `high` | Fable 5.1 |
+| `edge-case-analyst` | read-only | `fable` | `high` | Fable 5.2 |
+| `advisor` | read-only | `fable` | `high` | Fable 5.2 |
 | `spec-test-writer` | writable | `sonnet` | `high` | Sonnet 5.5 |
 
 `AGT-2` Model distribution MUST be **5 Fable** (`planner`, `forensic-analyst`, `reviewer`, `edge-case-analyst`, `advisor`) · **3 Opus** (`coding-worker`, `doc-reviewer`, `qa-engineer`) · **2 Sonnet** (`helper-worker`, `spec-test-writer`) · **1 Haiku** (`fast-coding-worker`).
@@ -132,7 +132,7 @@ tools: Read, Grep, Glob, Bash, WebFetch, WebSearch, Edit, Write, NotebookEdit
 
 ## 5. Model Routing
 
-`MDL-1` Each role MUST be pinned to the `model` family alias in §3 via its frontmatter. Specs MUST use the alias (`fable`/`opus`/`sonnet`/`haiku`), not a full model ID, so that each role runs the newest model Claude Code knows for its family without a roster edit. Any doc that names the concrete model an alias resolves to MUST state the Claude Code version that resolution is true for (§3 states 2.1.255+, and 2.1.293 for `haiku`, the first build where it resolves to Haiku 5.5). Pinning full model IDs remains a rejected alternative: it would freeze the roster on a version.
+`MDL-1` Each role MUST be pinned to the `model` family alias in §3 via its frontmatter. Specs MUST use the alias (`fable`/`opus`/`sonnet`/`haiku`), not a full model ID, so that each role runs the newest model Claude Code knows for its family without a roster edit. Any doc that names the concrete model an alias resolves to MUST state the Claude Code version that resolution is true for (§3 states 2.1.321+, the first build where `fable` resolves to Fable 5.2). Pinning full model IDs remains a rejected alternative: it would freeze the roster on a version.
 
 `MDL-2` The parent MUST spawn each role with the model pinned in its spec and MUST NOT override a role to an unlisted model at dispatch time. Model changes MUST happen by editing the spec plus docs, never ad hoc.
 
@@ -262,7 +262,7 @@ The advisor MUST NOT edit files and MUST NOT produce user-facing output.
 
 `INS-5` The installer MUST NOT overwrite existing, differing files unless `--force` is given, and MUST make no writes under `--dry-run`.
 
-`INS-6` The installer MUST warn when `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is set in the environment, because it silently overrides per-role model routing (`MDL-3`). It MUST also warn when any `ANTHROPIC_DEFAULT_FABLE_MODEL`/`ANTHROPIC_DEFAULT_OPUS_MODEL`/`ANTHROPIC_DEFAULT_SONNET_MODEL`/`ANTHROPIC_DEFAULT_HAIKU_MODEL` variable is set, because it redirects the family alias a role pins (`MDL-1`), and when the installed `claude` is older than 2.1.293, because the aliases resolve to older models there. The version check MUST be skipped silently when `claude` is not on `PATH`.
+`INS-6` The installer MUST warn when `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is set in the environment, because it silently overrides per-role model routing (`MDL-3`). It MUST also warn when any `ANTHROPIC_DEFAULT_FABLE_MODEL`/`ANTHROPIC_DEFAULT_OPUS_MODEL`/`ANTHROPIC_DEFAULT_SONNET_MODEL`/`ANTHROPIC_DEFAULT_HAIKU_MODEL` variable is set, because it redirects the family alias a role pins (`MDL-1`), and when the installed `claude` is older than 2.1.321, because the aliases resolve to older models there. The version check MUST be skipped silently when `claude` is not on `PATH`.
 
 `INS-7` After install, the installer MUST advise the user to start a new Claude Code session so the agents are picked up (subagent file edits require a session restart unless made via `/agents`; skill edits are picked up live).
 

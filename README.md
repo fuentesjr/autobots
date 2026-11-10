@@ -16,19 +16,19 @@ Every role is pinned to a Claude model family chosen for task fit. Roles whose o
 
 | Role | Model (alias → resolves to) | Access | Effort |
 |---|---|---|---|
-| `planner` | `fable` → Fable 5.1 | read-only | high |
+| `planner` | `fable` → Fable 5.2 | read-only | high |
 | `coding-worker` | `opus` → Opus 5.5 | writable | medium |
 | `fast-coding-worker` | `haiku` → Haiku 5.5 | writable | medium |
 | `helper-worker` | `sonnet` → Sonnet 5.5 | read-only | low |
-| `forensic-analyst` | `fable` → Fable 5.1 | read-only | high |
+| `forensic-analyst` | `fable` → Fable 5.2 | read-only | high |
 | `doc-reviewer` | `opus` → Opus 5.5 | read-only | high |
-| `reviewer` | `fable` → Fable 5.1 | read-only | high |
+| `reviewer` | `fable` → Fable 5.2 | read-only | high |
 | `qa-engineer` | `opus` → Opus 5.5 | writable | high |
-| `edge-case-analyst` | `fable` → Fable 5.1 | read-only | high |
-| `advisor` | `fable` → Fable 5.1 | read-only | high |
+| `edge-case-analyst` | `fable` → Fable 5.2 | read-only | high |
+| `advisor` | `fable` → Fable 5.2 | read-only | high |
 | `spec-test-writer` | `sonnet` → Sonnet 5.5 | writable | high |
 
-Each role's `model:` is a family alias (`fable`, `opus`, `sonnet`, `haiku`), not a versioned ID, so a role always runs the newest model Claude Code knows for that family: when a new Fable ships and Claude Code re-points the alias, every Fable role moves with it, with no roster edit. Autobots assumes the Anthropic API provider; other providers (Bedrock, Google Cloud, Foundry, Claude Platform on AWS) can resolve the same alias to an older model — see [Claude Code's alias table](https://code.claude.com/docs/en/model-config#model-aliases). The "resolves to" column is what those aliases meant on Claude Code 2.1.255 or later, except `haiku` → Haiku 5.5, which needs Claude Code 2.1.293 or later (earlier builds resolve `haiku` to Haiku 4.5, which ignores `effort`; before 2.1.255, `fable` meant Fable 5). Two things can make an alias resolve to something else: an older Claude Code build, and an `ANTHROPIC_DEFAULT_FABLE_MODEL`/`_OPUS_MODEL`/`_SONNET_MODEL`/`_HAIKU_MODEL` environment variable, which redirects the alias outright. The installer warns on both. To see what an alias resolves to today, run `claude -p --model sonnet --output-format json "ok" | jq '.modelUsage | keys'`; the model IDs a routing-gate run actually tested are recorded as `resolved_models` in its `evals/results/*.json` file. Every role, Haiku included, also sets `effort` explicitly rather than inheriting the session's effort level.
+Each role's `model:` is a family alias (`fable`, `opus`, `sonnet`, `haiku`), not a versioned ID, so a role always runs the newest model Claude Code knows for that family: when a new Fable ships and Claude Code re-points the alias, every Fable role moves with it, with no roster edit. Autobots assumes the Anthropic API provider; other providers (Bedrock, Google Cloud, Foundry, Claude Platform on AWS) can resolve the same alias to an older model — see [Claude Code's alias table](https://code.claude.com/docs/en/model-config#model-aliases). The "resolves to" column is what those aliases mean on Claude Code 2.1.321 or later, the first build where `fable` resolves to Fable 5.2 (before 2.1.321, `fable` meant Fable 5.1; before 2.1.293, `haiku` meant Haiku 4.5, which ignores `effort`). Two things can make an alias resolve to something else: an older Claude Code build, and an `ANTHROPIC_DEFAULT_FABLE_MODEL`/`_OPUS_MODEL`/`_SONNET_MODEL`/`_HAIKU_MODEL` environment variable, which redirects the alias outright. The installer warns on both. To see what an alias resolves to today, run `claude -p --model sonnet --output-format json "ok" | jq '.modelUsage | keys'`; the model IDs a routing-gate run actually tested are recorded as `resolved_models` in its `evals/results/*.json` file. Every role, Haiku included, also sets `effort` explicitly rather than inheriting the session's effort level. `docs/design.md` (Model Mapping) compares each role with Anthropic's [model-selection guide](https://claude.dev/blog/which-claude-model-should-you-build-with/) and lists where the roster differs.
 
 Only four roles are writable — `coding-worker`, `fast-coding-worker`, `qa-engineer`, `spec-test-writer` — and can edit files (`spec-test-writer` edits only test files and test fixtures). The other seven are read-only by construction: their `tools:` allowlist withholds `Edit`, `Write`, and `NotebookEdit`. No role is ever granted the `Agent` tool, so no subagent can spawn another subagent — delegation is exactly one level deep, and every result returns to the parent.
 

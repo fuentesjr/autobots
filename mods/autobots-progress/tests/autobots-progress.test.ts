@@ -605,6 +605,22 @@ describe('agents panel', () => {
     expect(showsDollars(await panelStrings($, h), '0.05'), 'the cost is $0.05').toBe(true)
   })
 
+  test('the cost estimate for Claude Fable 5.2 charges $8 per million input tokens', async ($, on) => {
+    const run = workerOn(on, 'claude-fable-5-2', { input: 100_000, output: 0 })
+    const h = await boot($, on)
+    await run($)
+    // 100,000 input tokens at $8 per million is $0.80.
+    expect(showsDollars(await panelStrings($, h), '0.80'), 'the cost is $0.80').toBe(true)
+  })
+
+  test('a dated Claude Fable 5 model ID is not priced as Fable 5.2', async ($, on) => {
+    const run = workerOn(on, 'claude-fable-5-20260715', { input: 100_000, output: 0 })
+    const h = await boot($, on)
+    await run($)
+    // 100,000 input tokens at Fable 5's $10 per million is $1.00.
+    expect(showsDollars(await panelStrings($, h), '1.00'), 'the cost is $1.00').toBe(true)
+  })
+
   test('a non-roster subagent that runs while the panel is shown appears in the panel under its own type name', async ($, on) => {
     const h = await boot($, on)
     await $.command.run({ command: 'agents-info', args: '' } as never)

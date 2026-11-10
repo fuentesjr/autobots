@@ -187,6 +187,22 @@ that an existing test asserts, name that test and the new expected behavior
 in the brief; implementers change an existing assertion only when the brief
 asks for that exact change.
 
+**When a result falls short.** Fix it in this order, stopping at the first
+step that works. First, name in the brief a check the subagent can run on its
+own work (a test, a build, or a script) and re-dispatch. Second, re-dispatch
+the same role with `ultrathink` in the prompt. Third, route a
+`fast-coding-worker` task to `coding-worker`. `helper-worker` has no larger
+role for reading work, so split its task into narrower questions and
+re-dispatch those; send it to `forensic-analyst` only when the open question
+is why something fails. More reasoning does not give a role knowledge or
+skill it lacks, so skip the second step when the result shows a capability
+gap.
+
+**Keep verbose reading off the large models.** Send log reading, wide
+searches, and large-file summaries to `helper-worker`, and pass its summary,
+not the raw output, to the Fable roles (`planner`, `forensic-analyst`,
+`reviewer`, `edge-case-analyst`, `advisor`).
+
 **Parallel writable work.** When two writable workers (`coding-worker`,
 `fast-coding-worker`, `qa-engineer`, `spec-test-writer`) run in parallel, give each disjoint
 ownership (non-overlapping files/scopes) or spawn them with

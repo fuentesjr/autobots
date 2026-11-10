@@ -284,9 +284,13 @@ const colorOf = (role: string): string => ROLE_COLOR[role] ?? '#888780'
 // USD per million tokens: input, output, cache read, cache write (5-minute TTL).
 // The engine reports tokens, not money, so the panel's cost is an estimate.
 const PRICES: [RegExp, [number, number, number, number]][] = [
+  // Fable 5.2: cache write derived with the standard 1.25x multiplier.
+  // `(?!\d)` keeps a dated Fable 5 ID (claude-fable-5-2026…) on the row below.
+  [/fable-5-2(?!\d)/, [8, 40, 0.2, 10]],
   [/fable|mythos/, [10, 50, 0.25, 12.5]],
   [/opus-5-5/, [4, 20, 0.2, 5]],
   [/opus/, [5, 25, 0.5, 6.25]],
+  [/sonnet-5-5/, [2, 10, 0.1, 2.5]],
   [/sonnet/, [2, 10, 0.2, 2.5]],
   // Haiku 5.5: cache read/write derived with the standard 0.1x / 1.25x multipliers.
   // Its higher rate above 100K-token prompts is ignored: the cost is an estimate.
